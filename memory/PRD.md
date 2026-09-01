@@ -84,10 +84,11 @@ User (id, name, email, role ∈ {admin, manager, member}, department, active)
   - Phases 3-7: shipped + testing-agent-verified, awaiting user confirmation.
 
 ## Recent additions (Feb 2026, post-Phase 7)
-- **Project Detail View** (`/projects/:id`): header w/ status/POC/dates, per-stage counts, Deliverables list w/ inline Approve/Send Back for Ready-for-Review items, Work Log filtered to this project.
+- **Work Sheet flat-spreadsheet view**: gridlines, row numbers, green header row, borderless cells, sticky header — matches the user's actual Google Sheet look. Columns, functionality, and dropdowns are unchanged.
+- **Project Detail View** (`/projects/:id`): header w/ status/POC/dates, per-stage counts, Deliverables list w/ inline Approve/Send Back for Ready-for-Review items, Work Log filtered to this project. Now also has **"+ Add Deliverable"** button and **pencil edit icon** per deliverable (admin only) — opens a modal to add or edit name/type/owner/dates/stage/stage_status.
 - **Deliverable Types** updated to the user's 29 domain-specific list (Internal Meets, Client Meets, Campaign Ideation variants, Emailers, Carousel, GIF, Reels, Data Research SMI/Web, etc). Old generic types removed.
-- **Sheet-like inline row entry**: replaced "Add Row" button with a green-tinted draft row at the top of the sheet. Any field change triggers row creation on blur (like Google Sheets). Sticky project/deliverable/stage context carried across new rows via localStorage.
-- **Client Editing**: pencil icon on Clients now opens a proper Edit modal with rename, contact update, and Archive/Restore (status Active↔Inactive). Backend PATCH /api/clients/{id} added, admin-only.
+- **Sheet-like inline row entry**: replaced "Add Row" button with a draft row at the top of the sheet. Any field change triggers row creation on blur (like Google Sheets). Sticky project/deliverable/stage context carried across new rows via localStorage.
+- **Client Editing**: pencil icon on Clients opens a proper Edit modal with rename, contact update, and Archive/Restore. Backend PATCH /api/clients/{id} added, admin-only.
 - **Work-items filtering**: /api/work-items now supports `project_id` and `deliverable_id` query params for the project detail view.
 
 ## Backlog / next candidates (P1)

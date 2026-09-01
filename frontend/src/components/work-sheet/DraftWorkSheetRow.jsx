@@ -71,8 +71,9 @@ export const DraftWorkSheetRow = ({ currentUser, users, options, projects = [], 
   };
 
   return (
-    <TableRow data-testid="worksheet-draft-row" className="bg-emerald-50/30">
-      <TableCell>
+    <TableRow data-testid="worksheet-draft-row">
+      <TableCell className="row-num">+</TableCell>
+      <TableCell className="checkbox-cell">
         <Checkbox disabled />
       </TableCell>
       <TableCell>
@@ -202,10 +203,10 @@ export const DraftWorkSheetRow = ({ currentUser, users, options, projects = [], 
           className="h-8 w-[80px]"
         />
       </TableCell>
-      <TableCell className="text-xs text-slate-400">
-        {isMember ? currentUser.name : (users.find((u) => u.id === draft.creator_id)?.name || currentUser.name)}
+      <TableCell>
+        <span className="cell-plain block">{isMember ? currentUser.name : (users.find((u) => u.id === draft.creator_id)?.name || currentUser.name)}</span>
       </TableCell>
-      <TableCell className="text-xs text-slate-400">—</TableCell>
+      <TableCell><span className="cell-plain block text-slate-400">—</span></TableCell>
       <TableCell>
         <Textarea
           data-testid="worksheet-draft-remarks"

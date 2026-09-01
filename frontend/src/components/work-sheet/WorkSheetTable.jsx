@@ -8,13 +8,15 @@ const COLUMNS = ["Date", "Project", "Deliverable Link", "Stage", "Deliverable", 
 
 export const WorkSheetTable = ({ items, currentUser, users, options, projects, deliverables, onUpdate, onDelete, onCreate, selectedIds, onToggleSelect, onToggleSelectAll }) => {
   const allSelected = items.length > 0 && selectedIds.length === items.length;
+  const totalCols = COLUMNS.length + (currentUser.role === "admin" ? 3 : 2); // #, checkbox, cols, (delete for admin)
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div className="flex-1 overflow-auto sheet-mode">
       <Table data-testid={WORKSHEET.table}>
-        <TableHeader className="sticky top-0 bg-card z-10">
+        <TableHeader>
           <TableRow>
-            <TableHead className="w-10">
+            <TableHead className="row-num-head">#</TableHead>
+            <TableHead className="checkbox-cell">
               <Checkbox
                 data-testid="worksheet-select-all-checkbox"
                 checked={allSelected}
@@ -40,16 +42,17 @@ export const WorkSheetTable = ({ items, currentUser, users, options, projects, d
           />
           {items.length === 0 ? (
             <TableRow>
-              <td colSpan={COLUMNS.length + (currentUser.role === "admin" ? 2 : 1)} data-testid={WORKSHEET.emptyState} className="py-16 text-center">
-                <p className="text-sm font-medium text-foreground">No work items yet</p>
-                <p className="text-xs text-muted-foreground">Start typing in the top row above to add your first entry.</p>
+              <td colSpan={totalCols} data-testid={WORKSHEET.emptyState} className="py-16 text-center">
+                <p className="text-sm font-medium text-slate-700">No work items yet</p>
+                <p className="text-xs text-slate-500">Start typing in the top row above to add your first entry.</p>
               </td>
             </TableRow>
           ) : (
-            items.map((item) => (
+            items.map((item, idx) => (
               <WorkSheetRow
                 key={item.id}
                 item={item}
+                index={idx + 1}
                 currentUser={currentUser}
                 users={users}
                 options={options}

@@ -12,7 +12,7 @@ import { WORKSHEET } from "@/constants/testIds";
 const NONE_VALUE = "__none__";
 const STAGES = ["Content", "Design", "Animate", "Finish"];
 
-export const WorkSheetRow = ({ item, currentUser, users, options, projects = [], deliverables = [], onUpdate, onDelete, selected, onToggleSelect }) => {
+export const WorkSheetRow = ({ item, index, currentUser, users, options, projects = [], deliverables = [], onUpdate, onDelete, selected, onToggleSelect }) => {
   const isMember = currentUser.role === "member";
   const isElevated = !isMember;
   const canEditRow = isElevated || item.creator_id === currentUser.id;
@@ -43,7 +43,8 @@ export const WorkSheetRow = ({ item, currentUser, users, options, projects = [],
 
   return (
     <TableRow data-testid={`worksheet-row-${item.id}`}>
-      <TableCell>
+      <TableCell className="row-num">{index}</TableCell>
+      <TableCell className="checkbox-cell">
         <Checkbox
           data-testid={`worksheet-row-checkbox-${item.id}`}
           checked={selected}
@@ -127,7 +128,7 @@ export const WorkSheetRow = ({ item, currentUser, users, options, projects = [],
             placeholder="Deliverable name"
           />
         ) : (
-          <span className="text-sm">{item.deliverable_name || "—"}</span>
+          <span className="cell-plain block">{item.deliverable_name || "—"}</span>
         )}
       </TableCell>
       <TableCell>
@@ -143,7 +144,7 @@ export const WorkSheetRow = ({ item, currentUser, users, options, projects = [],
             </SelectContent>
           </Select>
         ) : (
-          <span className="text-sm text-muted-foreground">{item.deliverable_type || "—"}</span>
+          <span className="cell-plain block">{item.deliverable_type || "—"}</span>
         )}
       </TableCell>
       <TableCell>
@@ -159,7 +160,7 @@ export const WorkSheetRow = ({ item, currentUser, users, options, projects = [],
             </SelectContent>
           </Select>
         ) : (
-          <span className="text-sm text-muted-foreground">{item.work_category}</span>
+          <span className="cell-plain block">{item.work_category}</span>
         )}
       </TableCell>
       <TableCell>
@@ -197,7 +198,7 @@ export const WorkSheetRow = ({ item, currentUser, users, options, projects = [],
             </SelectContent>
           </Select>
         ) : (
-          <span className="text-sm">{nameOf(item.creator_id)}</span>
+          <span className="cell-plain block">{nameOf(item.creator_id)}</span>
         )}
       </TableCell>
       <TableCell>
@@ -217,7 +218,7 @@ export const WorkSheetRow = ({ item, currentUser, users, options, projects = [],
             </SelectContent>
           </Select>
         ) : (
-          <span className="text-sm text-muted-foreground">{item.reviewer_id ? nameOf(item.reviewer_id) : "Unassigned"}</span>
+          <span className="cell-plain block">{item.reviewer_id ? nameOf(item.reviewer_id) : "Unassigned"}</span>
         )}
       </TableCell>
       <TableCell>
