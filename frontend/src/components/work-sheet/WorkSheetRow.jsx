@@ -10,10 +10,12 @@ import { Trash2 } from "lucide-react";
 import { WORKSHEET } from "@/constants/testIds";
 
 const NONE_VALUE = "__none__";
+const STAGES = ["Content", "Design", "Animate", "Finish"];
 
-export const WorkSheetRow = ({ item, currentUser, users, options, onUpdate, onDelete, selected, onToggleSelect }) => {
+export const WorkSheetRow = ({ item, currentUser, users, options, projects = [], deliverables = [], onUpdate, onDelete, selected, onToggleSelect }) => {
   const isMember = currentUser.role === "member";
   const isElevated = !isMember;
+  const canEditRow = isElevated || item.creator_id === currentUser.id;
   const [local, setLocal] = useState({
     deliverable_name: item.deliverable_name,
     version: item.version,
@@ -32,6 +34,7 @@ export const WorkSheetRow = ({ item, currentUser, users, options, onUpdate, onDe
 
   const nameOf = (id) => users.find((u) => u.id === id)?.name || "Unassigned";
   const allowedStatuses = isMember ? options.member_forward_statuses : options.statuses;
+  const projectDeliverables = deliverables.filter((d) => d.project_id === item.project_id);
 
   const commit = (field, value) => {
     if (item[field] === value) return;
@@ -55,6 +58,63 @@ export const WorkSheetRow = ({ item, currentUser, users, options, onUpdate, onDe
           onChange={(e) => onUpdate(item.id, { work_date: e.target.value })}
           className="h-8 w-[130px]"
         />
+      </TableCell>
+      <TableCell>
+        <Select
+          value={item.project_id || NONE_VALUE}
+          onValueChange={(v) => {
+            const nextId = v === NONE_VALUE ? null : v;
+            const patch = { project_id: nextId };
+            // clear deliverable if switching project
+            if (nextId !== item.project_id) patch.deliverable_id = null;
+            onUpdate(item.id, patch);
+          }}
+          disabled={!canEditRow}
+        >
+          <SelectTrigger data-testid={`worksheet-project-select-${item.id}`} className="h-8 w-[160px]">
+            <SelectValue placeholder="Project" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE_VALUE}>—</SelectItem>
+            {projects.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <Select
+          value={item.deliverable_id || NONE_VALUE}
+          onValueChange={(v) => onUpdate(item.id, { deliverable_id: v === NONE_VALUE ? null : v })}
+          disabled={!canEditRow || !item.project_id}
+        >
+          <SelectTrigger data-testid={`worksheet-deliverable-select-${item.id}`} className="h-8 w-[160px]">
+            <SelectValue placeholder={item.project_id ? "Deliverable" : "—"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE_VALUE}>—</SelectItem>
+            {projectDeliverables.map((d) => (
+              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <Select
+          value={item.stage || NONE_VALUE}
+          onValueChange={(v) => onUpdate(item.id, { stage: v === NONE_VALUE ? null : v })}
+          disabled={!canEditRow}
+        >
+          <SelectTrigger data-testid={`worksheet-stage-select-${item.id}`} className="h-8 w-[110px]">
+            <SelectValue placeholder="Stage" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE_VALUE}>—</SelectItem>
+            {STAGES.map((s) => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </TableCell>
       <TableCell>
         {isElevated ? (

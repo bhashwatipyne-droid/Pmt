@@ -11,11 +11,11 @@ export const RoleSwitcher = () => {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden sm:inline text-xs uppercase tracking-wide text-teal-100/80">Acting as</span>
+      <span className="hidden sm:inline text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acting as</span>
       <Select value={currentUserId} onValueChange={setCurrentUser}>
         <SelectTrigger
           data-testid={WORKSHEET.roleSwitcher}
-          className="h-9 w-[220px] bg-teal-950/40 border-teal-400/30 text-white focus:ring-teal-300"
+          className="h-9 w-[220px] border-slate-200 bg-white text-slate-800 focus:ring-indigo-300"
         >
           <SelectValue placeholder="Select user">
             {currentUser ? `${currentUser.name} · ${currentUser.role}` : "Select user"}

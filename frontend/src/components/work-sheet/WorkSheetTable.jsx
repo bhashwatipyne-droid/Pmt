@@ -3,9 +3,9 @@ import { Checkbox } from "../ui/checkbox";
 import { WorkSheetRow } from "./WorkSheetRow";
 import { WORKSHEET } from "@/constants/testIds";
 
-const COLUMNS = ["Date", "Deliverable", "Type", "Category", "Version", "Time (min)", "Creator", "Reviewer", "Remarks", "Status"];
+const COLUMNS = ["Date", "Project", "Deliverable Link", "Stage", "Deliverable", "Type", "Category", "Version", "Time (min)", "Creator", "Reviewer", "Remarks", "Status"];
 
-export const WorkSheetTable = ({ items, currentUser, users, options, onUpdate, onDelete, selectedIds, onToggleSelect, onToggleSelectAll }) => {
+export const WorkSheetTable = ({ items, currentUser, users, options, projects, deliverables, onUpdate, onDelete, selectedIds, onToggleSelect, onToggleSelectAll }) => {
   if (!items.length) {
     return (
       <div data-testid={WORKSHEET.emptyState} className="flex flex-col items-center justify-center gap-2 py-20 text-center">
@@ -43,6 +43,8 @@ export const WorkSheetTable = ({ items, currentUser, users, options, onUpdate, o
               currentUser={currentUser}
               users={users}
               options={options}
+              projects={projects}
+              deliverables={deliverables}
               onUpdate={onUpdate}
               onDelete={onDelete}
               selected={selectedIds.includes(item.id)}

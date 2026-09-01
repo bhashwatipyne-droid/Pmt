@@ -6,7 +6,9 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import WorkSheetPage from "@/pages/WorkSheetPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProjectsPage from "@/pages/ProjectsPage";
-import PlaceholderPage from "@/pages/PlaceholderPage";
+import TeamPage from "@/pages/TeamPage";
+import ApprovalsPage from "@/pages/ApprovalsPage";
+import ClientsPage from "@/pages/ClientsPage";
 
 function App() {
   return (
@@ -18,9 +20,9 @@ function App() {
               <Route path="/" element={<WorkSheetPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/projects" element={<ProjectsPage />} />
-              <Route path="/team" element={<PlaceholderPage title="Team" phase="Phase 5" />} />
-              <Route path="/approvals" element={<PlaceholderPage title="Approvals" phase="Phase 4" />} />
-              <Route path="/clients" element={<PlaceholderPage title="Clients" phase="Phase 1 (up next)" />} />
+              <Route path="/team" element={<TeamPage />} />
+              <Route path="/approvals" element={<ApprovalsPage />} />
+              <Route path="/clients" element={<ClientsPage />} />
             </Routes>
           </AppLayout>
         </BrowserRouter>

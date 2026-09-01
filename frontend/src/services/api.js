@@ -62,3 +62,27 @@ export const updateProject = (userId, id, payload) =>
 
 export const deleteProject = (userId, id) =>
   axios.delete(`${API}/projects/${id}`, { headers: authHeaders(userId) }).then((r) => r.data);
+
+// -------- Deliverables --------
+export const getDeliverables = (userId, params) =>
+  axios.get(`${API}/deliverables`, { headers: authHeaders(userId), params }).then((r) => r.data);
+
+// -------- Team / Users --------
+export const createUser = (userId, payload) =>
+  axios.post(`${API}/users`, payload, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const updateUser = (userId, id, payload) =>
+  axios.patch(`${API}/users/${id}`, payload, { headers: authHeaders(userId) }).then((r) => r.data);
+
+// -------- Approvals --------
+export const getApprovals = (userId) =>
+  axios.get(`${API}/approvals`, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const approveDeliverable = (userId, id, note = "") =>
+  axios.post(`${API}/deliverables/${id}/approve`, { note }, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const rejectDeliverable = (userId, id, note = "") =>
+  axios.post(`${API}/deliverables/${id}/reject`, { note }, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const getDashboardOverview = (userId) =>
+  axios.get(`${API}/dashboard/overview`, { headers: authHeaders(userId) }).then((r) => r.data);

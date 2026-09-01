@@ -45,7 +45,7 @@ export const Sidebar = () => {
             Team
           </NavLink>
         )}
-        {isAdmin && (
+        {(isAdmin || currentUser?.role === "manager") && (
           <NavLink to="/approvals" data-testid="sidebar-nav-approvals" className={navItemClass}>
             <CheckSquare className="h-4 w-4" />
             Approvals

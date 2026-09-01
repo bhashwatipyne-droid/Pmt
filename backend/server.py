@@ -29,20 +29,22 @@ DELIVERABLE_TYPES = ["Blog Post", "Social Media Post", "Design Asset", "Video", 
 WORK_CATEGORIES = ["Core", "Non-Core"]
 STATUSES = ["Not Started", "Ongoing", "Ready for Review", "Changes Requested", "Closed"]
 MEMBER_FORWARD_STATUSES = ["Not Started", "Ongoing", "Ready for Review"]
-MEMBER_EDITABLE_FIELDS = {"work_date", "version", "time_taken_minutes", "remarks", "status"}
+MEMBER_EDITABLE_FIELDS = {"work_date", "version", "time_taken_minutes", "remarks", "status", "project_id", "deliverable_id", "stage", "deliverable_name", "deliverable_type"}
 
 PROJECT_STATUSES = ["Planning", "Active", "In Rework", "Completed"]
 STAGES = ["Content", "Design", "Animate", "Finish"]
-STAGE_STATUSES = ["Not Started", "In Progress", "Ready for Review", "Completed"]
+STAGE_STATUSES = ["Not Started", "In Progress", "Ready for Review", "Changes Requested", "Completed"]
 CLIENT_STATUSES = ["Active", "Inactive"]
+DEPARTMENTS = ["Content", "Design", "Animation", "Finish", "Administration"]
+ROLES = ["admin", "manager", "member"]
 
 SEED_USERS = [
-    {"id": "admin-1", "name": "Aisha Khan", "role": "admin"},
-    {"id": "manager-1", "name": "Rahul Verma", "role": "manager"},
-    {"id": "manager-2", "name": "Priya Nair", "role": "manager"},
-    {"id": "member-1", "name": "Sam Fernandes", "role": "member"},
-    {"id": "member-2", "name": "Neha Joshi", "role": "member"},
-    {"id": "member-3", "name": "Vikram Singh", "role": "member"},
+    {"id": "admin-1", "name": "Aisha Khan", "email": "aisha@thefinpedia.com", "role": "admin", "department": "Administration", "active": True},
+    {"id": "manager-1", "name": "Rahul Verma", "email": "rahul@thefinpedia.com", "role": "manager", "department": "Content", "active": True},
+    {"id": "manager-2", "name": "Priya Nair", "email": "priya@thefinpedia.com", "role": "manager", "department": "Design", "active": True},
+    {"id": "member-1", "name": "Sam Fernandes", "email": "sam@thefinpedia.com", "role": "member", "department": "Content", "active": True},
+    {"id": "member-2", "name": "Neha Joshi", "email": "neha@thefinpedia.com", "role": "member", "department": "Design", "active": True},
+    {"id": "member-3", "name": "Vikram Singh", "email": "vikram@thefinpedia.com", "role": "member", "department": "Animation", "active": True},
 ]
 
 SEED_CLIENTS = [
@@ -56,6 +58,25 @@ class User(BaseModel):
     id: str
     name: str
     role: str
+    email: Optional[str] = ""
+    department: Optional[str] = ""
+    active: Optional[bool] = True
+
+
+class UserCreate(BaseModel):
+    name: str
+    email: Optional[str] = ""
+    role: str
+    department: Optional[str] = ""
+    active: Optional[bool] = True
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+    department: Optional[str] = None
+    active: Optional[bool] = None
 
 
 class WorkItem(BaseModel):
@@ -71,6 +92,9 @@ class WorkItem(BaseModel):
     creator_id: Optional[str] = None
     reviewer_id: Optional[str] = None
     manager_id: Optional[str] = None
+    project_id: Optional[str] = None
+    deliverable_id: Optional[str] = None
+    stage: Optional[str] = None
     remarks: str = ""
     status: str = "Not Started"
     created_at: str
@@ -87,6 +111,9 @@ class WorkItemCreate(BaseModel):
     creator_id: Optional[str] = None
     reviewer_id: Optional[str] = None
     manager_id: Optional[str] = None
+    project_id: Optional[str] = None
+    deliverable_id: Optional[str] = None
+    stage: Optional[str] = None
     remarks: Optional[str] = ""
     status: Optional[str] = "Not Started"
 
@@ -101,6 +128,9 @@ class WorkItemUpdate(BaseModel):
     creator_id: Optional[str] = None
     reviewer_id: Optional[str] = None
     manager_id: Optional[str] = None
+    project_id: Optional[str] = None
+    deliverable_id: Optional[str] = None
+    stage: Optional[str] = None
     remarks: Optional[str] = None
     status: Optional[str] = None
 
@@ -212,6 +242,8 @@ def scoped_update_fields(user: User, existing: dict, update_fields: dict) -> dic
             raise HTTPException(status_code=403, detail="Members cannot set this status")
     if "work_date" in update_fields and update_fields["work_date"]:
         update_fields["month"] = update_fields["work_date"][:7]
+    if "stage" in update_fields and update_fields["stage"] and update_fields["stage"] not in STAGES:
+        raise HTTPException(status_code=400, detail="Invalid stage")
     return update_fields
 
 
@@ -244,6 +276,8 @@ async def get_options():
         "stages": STAGES,
         "stage_statuses": STAGE_STATUSES,
         "client_statuses": CLIENT_STATUSES,
+        "departments": DEPARTMENTS,
+        "roles": ROLES,
     }
 
 
@@ -647,6 +681,165 @@ async def delete_deliverable(deliverable_id: str, x_user_id: Optional[str] = Hea
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Deliverable not found")
     return {"success": True}
+
+
+# ---------------- Team management (admin) ----------------
+@api_router.post("/users", response_model=User)
+async def create_user(payload: UserCreate, x_user_id: Optional[str] = Header(default=None)):
+    await require_admin(x_user_id)
+    if payload.role not in ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    if payload.department and payload.department not in DEPARTMENTS:
+        raise HTTPException(status_code=400, detail="Invalid department")
+    role_prefix = payload.role
+    uid = f"{role_prefix}-{uuid.uuid4().hex[:6]}"
+    doc = {
+        "id": uid,
+        "name": payload.name.strip(),
+        "email": (payload.email or "").strip(),
+        "role": payload.role,
+        "department": payload.department or "",
+        "active": payload.active if payload.active is not None else True,
+    }
+    await db.users.insert_one(doc)
+    return User(**doc)
+
+
+@api_router.patch("/users/{user_id}", response_model=User)
+async def update_user(user_id: str, payload: UserUpdate, x_user_id: Optional[str] = Header(default=None)):
+    await require_admin(x_user_id)
+    existing = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    update_fields = payload.model_dump(exclude_unset=True)
+    if "role" in update_fields and update_fields["role"] not in ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    if "department" in update_fields and update_fields["department"] and update_fields["department"] not in DEPARTMENTS:
+        raise HTTPException(status_code=400, detail="Invalid department")
+    await db.users.update_one({"id": user_id}, {"$set": update_fields})
+    return User(**{**existing, **update_fields})
+
+
+# ---------------- Approvals (deliverable review queue) ----------------
+def _next_stage(stage: str) -> Optional[str]:
+    try:
+        idx = STAGES.index(stage)
+        return STAGES[idx + 1] if idx + 1 < len(STAGES) else None
+    except ValueError:
+        return None
+
+
+@api_router.get("/approvals")
+async def list_approvals(x_user_id: Optional[str] = Header(default=None)):
+    """Deliverables waiting for review, hydrated with project + owner details."""
+    await get_acting_user(x_user_id)
+    delivs = await db.deliverables.find(
+        {"stage_status": "Ready for Review"}, {"_id": 0}
+    ).sort("updated_at", -1).to_list(500)
+    project_ids = list({d["project_id"] for d in delivs})
+    projects = {p["id"]: p for p in await db.projects.find({"id": {"$in": project_ids}}, {"_id": 0}).to_list(500)}
+    users = {u["id"]: u for u in await db.users.find({}, {"_id": 0}).to_list(500)}
+    clients = {c["id"]: c for c in await db.clients.find({}, {"_id": 0}).to_list(500)}
+    result = []
+    for d in delivs:
+        p = projects.get(d["project_id"]) or {}
+        owner = users.get(d.get("owner_id") or "") or {}
+        client = clients.get(p.get("client_id") or "") or {}
+        result.append({
+            **d,
+            "project_name": p.get("name", ""),
+            "project_code": p.get("code", ""),
+            "client_name": client.get("name", ""),
+            "owner_name": owner.get("name", "Unassigned"),
+        })
+    return result
+
+
+class ApprovalDecision(BaseModel):
+    note: Optional[str] = ""
+
+
+@api_router.post("/deliverables/{deliverable_id}/approve")
+async def approve_deliverable(deliverable_id: str, payload: ApprovalDecision, x_user_id: Optional[str] = Header(default=None)):
+    """Advance to next stage; if at Finish, mark Completed."""
+    user = await get_acting_user(x_user_id)
+    if user.role not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Only admin or manager can approve")
+    existing = await db.deliverables.find_one({"id": deliverable_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Deliverable not found")
+    cur = existing.get("current_stage", "Content")
+    nxt = _next_stage(cur)
+    if nxt is None:
+        update = {"stage_status": "Completed"}
+    else:
+        update = {"current_stage": nxt, "stage_status": "Not Started"}
+    update["updated_at"] = now_iso()
+    update["last_review_note"] = payload.note or ""
+    update["last_review_action"] = "approved"
+    update["last_reviewer_id"] = user.id
+    await db.deliverables.update_one({"id": deliverable_id}, {"$set": update})
+    return await db.deliverables.find_one({"id": deliverable_id}, {"_id": 0})
+
+
+@api_router.post("/deliverables/{deliverable_id}/reject")
+async def reject_deliverable(deliverable_id: str, payload: ApprovalDecision, x_user_id: Optional[str] = Header(default=None)):
+    user = await get_acting_user(x_user_id)
+    if user.role not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Only admin or manager can reject")
+    existing = await db.deliverables.find_one({"id": deliverable_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Deliverable not found")
+    update = {
+        "stage_status": "Changes Requested",
+        "updated_at": now_iso(),
+        "last_review_note": payload.note or "",
+        "last_review_action": "rejected",
+        "last_reviewer_id": user.id,
+    }
+    await db.deliverables.update_one({"id": deliverable_id}, {"$set": update})
+    return await db.deliverables.find_one({"id": deliverable_id}, {"_id": 0})
+
+
+# ---------------- Dashboard overview (project-centric) ----------------
+@api_router.get("/dashboard/overview")
+async def dashboard_overview(x_user_id: Optional[str] = Header(default=None)):
+    await require_admin(x_user_id)
+    projects = await db.projects.find({}, {"_id": 0}).to_list(1000)
+    deliverables = await db.deliverables.find({}, {"_id": 0}).to_list(5000)
+    work_items = await db.work_items.find({}, {"_id": 0}).to_list(10000)
+    today = datetime.now(timezone.utc).date()
+    week_end = today + timedelta(days=7)
+    project_status_counts = {s: 0 for s in PROJECT_STATUSES}
+    for p in projects:
+        project_status_counts[p.get("status", "Planning")] = project_status_counts.get(p.get("status", "Planning"), 0) + 1
+    deliv_stage_counts = {s: 0 for s in STAGES}
+    for d in deliverables:
+        deliv_stage_counts[d.get("current_stage", "Content")] = deliv_stage_counts.get(d.get("current_stage", "Content"), 0) + 1
+    needs_review = sum(1 for d in deliverables if d.get("stage_status") in ("Ready for Review", "Changes Requested"))
+    due_this_week = 0
+    for p in projects:
+        try:
+            d = datetime.fromisoformat(p.get("end_date")).date()
+            if today <= d <= week_end and p.get("status") != "Completed":
+                due_this_week += 1
+        except (ValueError, TypeError):
+            continue
+    total_minutes = sum(w.get("time_taken_minutes", 0) or 0 for w in work_items)
+    return {
+        "active_projects": project_status_counts.get("Active", 0),
+        "in_rework": project_status_counts.get("In Rework", 0),
+        "completed_projects": project_status_counts.get("Completed", 0),
+        "planning_projects": project_status_counts.get("Planning", 0),
+        "total_projects": len(projects),
+        "total_deliverables": len(deliverables),
+        "deliv_stage_counts": deliv_stage_counts,
+        "needs_review": needs_review,
+        "due_this_week": due_this_week,
+        "total_hours_logged": round(total_minutes / 60, 1),
+        "total_work_items": len(work_items),
+        "project_status_counts": project_status_counts,
+    }
 
 
 app.include_router(api_router)
