@@ -1,0 +1,46 @@
+# Project Management Tool — PRD
+
+## Original Problem Statement
+User wants a simple project-management tool with two experiences:
+1. Admin view with dashboard/reporting.
+2. Member/Manager view that behaves like a Google Sheet (junior employees are spreadsheet-familiar).
+
+Uploaded screen recording used as visual/workflow reference only (sidebar/dashboard hierarchy), not a spec to copy wholesale.
+
+## Roles
+- **Admin**: sees all rows, full edit, delete rows, (future) dashboard/reporting.
+- **Manager**: sees all rows, full edit (assign creator/reviewer, all statuses), cannot delete.
+- **Member**: sees only own rows (creator = self), can edit work_date/version/time_taken/remarks/status (status limited to Not Started/Ongoing/Ready for Review), cannot edit deliverable_name/type/category/creator/reviewer, cannot delete.
+
+## Data Model Decisions (user-approved)
+- One row = one work activity (flat sheet, no parent-deliverable grouping in v1 — deferred).
+- No real login for v1 — role switcher (acting-as demo user) simulates auth via `X-User-Id` header. Real auth deferred.
+- Historical data import deferred — sheet built with empty/sample data first.
+- Canonical `work_date`; `month` derived automatically (YYYY-MM), never free text.
+- `version` stored separately from `deliverable_type`.
+
+## What's Been Implemented (Sept 1, 2026)
+- **Backend** (`/app/backend/server.py`): FastAPI + Mongo, UUID-based ids (no raw ObjectId exposure).
+  - `GET/POST /api/users`, `GET /api/config/options` (dropdown lists), full CRUD on `/api/work-items` with role-based permission enforcement via `X-User-Id` header.
+  - Seeded demo users on startup: admin-1 (Aisha Khan), manager-1 (Rahul Verma), manager-2 (Priya Nair), member-1 (Sam Fernandes), member-2 (Neha Joshi), member-3 (Vikram Singh).
+- **Frontend**: Work Sheet screen only (`/app/frontend/src/pages/WorkSheetPage.jsx`).
+  - Role switcher (top-right), spreadsheet-style table with inline-editable cells, toolbar (search + status/type/category/month filters + Add Row), delete restricted to admin.
+  - Custom teal/slate theme (index.css) replacing default AI-slop palette.
+  - All interactive elements have `data-testid` (see `constants/testIds/worksheet.js`).
+- Tested via testing_agent: 20/20 backend pytest (`/app/backend/tests/test_worksheet.py`) + full frontend flow verification. All permission rules confirmed working.
+
+## Backlog (Prioritized)
+- **P0**: Admin Dashboard (summary metrics, team workload, attention-required items, status overview) — sheet-first, dashboard as summary layer above same data.
+- **P1**: Review workflow refinements (dedicated review queue view for managers).
+- **P1**: CSV/XLSX data import + normalization (client/employee name cleanup, date normalization) — user will supply cleaned file.
+- **P1**: Bulk operations (multi-row status update, bulk assign), Excel/CSV export.
+- **P2**: Real authentication (JWT or Emergent Google Auth) replacing role switcher — call `integration_expert` before implementing.
+- **P2**: Parent-deliverable grouping, activity history/audit log, comments, saved filters, notifications, Google Drive/Sheets integration, attachments, client portal.
+
+## Known Non-Blocking Notes (from testing_agent code review)
+- `@app.on_event` startup is deprecated FastAPI pattern (works fine, migrate to lifespan later if needed).
+- PATCH silently drops disallowed fields for members instead of returning 400 — acceptable for MVP UX (fields aren't rendered as editable in UI anyway).
+- No pagination on work-items list yet (fine at current scale).
+
+## Test Credentials
+No login exists. See `/app/memory/test_credentials.md`.
