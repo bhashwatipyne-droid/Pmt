@@ -29,8 +29,12 @@ Uploaded screen recording used as visual/workflow reference only (sidebar/dashbo
   - All interactive elements have `data-testid` (see `constants/testIds/worksheet.js`).
 - Tested via testing_agent: 20/20 backend pytest (`/app/backend/tests/test_worksheet.py`) + full frontend flow verification. All permission rules confirmed working.
 
+## What's Been Implemented (Sept 1, 2026, part 2)
+- **Admin Dashboard** (`/dashboard`, admin-only, styled per user's reference screen recording): sidebar layout (`Sidebar.jsx`, `AppLayout.jsx`), metric cards (total items, active members, hours logged, needs attention), 5-status breakdown tiles, Team Workload table, Needs Attention panel (oldest Ready-for-Review/Changes-Requested first). Non-admins see an inline "admins only" notice.
+- **Bulk actions on Work Sheet**: row checkboxes + select-all, `BulkActionBar` for bulk status change and (admin-only) bulk delete. Backend: `POST /api/work-items/bulk-update`, `POST /api/work-items/bulk-delete`, dashboard endpoints `GET /api/dashboard/summary|team-summary|attention-items` (all admin-gated via `require_admin`).
+- Tested via testing_agent: 19/19 new pytest + 20/20 regression, all frontend flows verified. Fixed minor issue: bulk-update now skips permission-violating rows instead of aborting the batch.
+
 ## Backlog (Prioritized)
-- **P0**: Admin Dashboard (summary metrics, team workload, attention-required items, status overview) — sheet-first, dashboard as summary layer above same data.
 - **P1**: Review workflow refinements (dedicated review queue view for managers).
 - **P1**: CSV/XLSX data import + normalization (client/employee name cleanup, date normalization) — user will supply cleaned file.
 - **P1**: Bulk operations (multi-row status update, bulk assign), Excel/CSV export.

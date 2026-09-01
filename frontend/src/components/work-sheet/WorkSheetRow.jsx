@@ -3,6 +3,7 @@ import { TableCell, TableRow } from "../ui/table";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { StatusBadge } from "./StatusBadge";
 import { Trash2 } from "lucide-react";
@@ -10,7 +11,7 @@ import { WORKSHEET } from "@/constants/testIds";
 
 const NONE_VALUE = "__none__";
 
-export const WorkSheetRow = ({ item, currentUser, users, options, onUpdate, onDelete }) => {
+export const WorkSheetRow = ({ item, currentUser, users, options, onUpdate, onDelete, selected, onToggleSelect }) => {
   const isMember = currentUser.role === "member";
   const isElevated = !isMember;
   const [local, setLocal] = useState({
@@ -39,6 +40,13 @@ export const WorkSheetRow = ({ item, currentUser, users, options, onUpdate, onDe
 
   return (
     <TableRow data-testid={`worksheet-row-${item.id}`}>
+      <TableCell>
+        <Checkbox
+          data-testid={`worksheet-row-checkbox-${item.id}`}
+          checked={selected}
+          onCheckedChange={() => onToggleSelect(item.id)}
+        />
+      </TableCell>
       <TableCell>
         <Input
           data-testid={`${WORKSHEET.dateInput}-${item.id}`}

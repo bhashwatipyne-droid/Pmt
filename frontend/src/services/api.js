@@ -20,3 +20,18 @@ export const updateWorkItem = (userId, id, payload) =>
 
 export const deleteWorkItem = (userId, id) =>
   axios.delete(`${API}/work-items/${id}`, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const bulkUpdateWorkItems = (userId, ids, patch) =>
+  axios.post(`${API}/work-items/bulk-update`, { ids, patch }, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const bulkDeleteWorkItems = (userId, ids) =>
+  axios.post(`${API}/work-items/bulk-delete`, { ids }, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const getDashboardSummary = (userId) =>
+  axios.get(`${API}/dashboard/summary`, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const getDashboardTeamSummary = (userId) =>
+  axios.get(`${API}/dashboard/team-summary`, { headers: authHeaders(userId) }).then((r) => r.data);
+
+export const getDashboardAttentionItems = (userId) =>
+  axios.get(`${API}/dashboard/attention-items`, { headers: authHeaders(userId) }).then((r) => r.data);

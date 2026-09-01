@@ -94,6 +94,15 @@ class WorkItemUpdate(BaseModel):
     status: Optional[str] = None
 
 
+class BulkUpdatePayload(BaseModel):
+    ids: List[str]
+    patch: WorkItemUpdate
+
+
+class BulkDeletePayload(BaseModel):
+    ids: List[str]
+
+
 # ---------------- Helpers ----------------
 async def get_acting_user(x_user_id: Optional[str] = Header(default=None)) -> User:
     if not x_user_id:
@@ -106,6 +115,26 @@ async def get_acting_user(x_user_id: Optional[str] = Header(default=None)) -> Us
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def scoped_update_fields(user: User, existing: dict, update_fields: dict) -> dict:
+    """Apply role-based restrictions to a raw update payload. Raises HTTPException on violation."""
+    if user.role == "member":
+        if existing.get("creator_id") != user.id:
+            raise HTTPException(status_code=403, detail="You can only edit your own work items")
+        update_fields = {k: v for k, v in update_fields.items() if k in MEMBER_EDITABLE_FIELDS}
+        if "status" in update_fields and update_fields["status"] not in MEMBER_FORWARD_STATUSES:
+            raise HTTPException(status_code=403, detail="Members cannot set this status")
+    if "work_date" in update_fields and update_fields["work_date"]:
+        update_fields["month"] = update_fields["work_date"][:7]
+    return update_fields
+
+
+async def require_admin(x_user_id: Optional[str] = Header(default=None)) -> User:
+    user = await get_acting_user(x_user_id)
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access only")
+    return user
 
 
 # ---------------- Routes ----------------
@@ -187,17 +216,7 @@ async def update_work_item(item_id: str, payload: WorkItemUpdate, x_user_id: Opt
     if not existing:
         raise HTTPException(status_code=404, detail="Work item not found")
 
-    update_fields = payload.model_dump(exclude_unset=True)
-
-    if user.role == "member":
-        if existing.get("creator_id") != user.id:
-            raise HTTPException(status_code=403, detail="You can only edit your own work items")
-        update_fields = {k: v for k, v in update_fields.items() if k in MEMBER_EDITABLE_FIELDS}
-        if "status" in update_fields and update_fields["status"] not in MEMBER_FORWARD_STATUSES:
-            raise HTTPException(status_code=403, detail="Members cannot set this status")
-
-    if "work_date" in update_fields and update_fields["work_date"]:
-        update_fields["month"] = update_fields["work_date"][:7]
+    update_fields = scoped_update_fields(user, existing, payload.model_dump(exclude_unset=True))
 
     update_fields["updated_at"] = now_iso()
     await db.work_items.update_one({"id": item_id}, {"$set": update_fields})
@@ -205,15 +224,107 @@ async def update_work_item(item_id: str, payload: WorkItemUpdate, x_user_id: Opt
     return updated
 
 
+@api_router.post("/work-items/bulk-update", response_model=List[WorkItem])
+async def bulk_update_work_items(payload: BulkUpdatePayload, x_user_id: Optional[str] = Header(default=None)):
+    user = await get_acting_user(x_user_id)
+    raw_fields = payload.patch.model_dump(exclude_unset=True)
+    updated_items = []
+    for item_id in payload.ids:
+        existing = await db.work_items.find_one({"id": item_id}, {"_id": 0})
+        if not existing:
+            continue
+        try:
+            update_fields = scoped_update_fields(user, existing, dict(raw_fields))
+        except HTTPException:
+            continue
+        update_fields["updated_at"] = now_iso()
+        await db.work_items.update_one({"id": item_id}, {"$set": update_fields})
+        updated_items.append(await db.work_items.find_one({"id": item_id}, {"_id": 0}))
+    return updated_items
+
+
+@api_router.post("/work-items/bulk-delete")
+async def bulk_delete_work_items(payload: BulkDeletePayload, x_user_id: Optional[str] = Header(default=None)):
+    await require_admin(x_user_id)
+    result = await db.work_items.delete_many({"id": {"$in": payload.ids}})
+    return {"deleted_count": result.deleted_count}
+
+
 @api_router.delete("/work-items/{item_id}")
 async def delete_work_item(item_id: str, x_user_id: Optional[str] = Header(default=None)):
-    user = await get_acting_user(x_user_id)
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only admins can delete work items")
+    await require_admin(x_user_id)
     result = await db.work_items.delete_one({"id": item_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Work item not found")
     return {"success": True}
+
+
+# ---------------- Dashboard ----------------
+@api_router.get("/dashboard/summary")
+async def dashboard_summary(x_user_id: Optional[str] = Header(default=None)):
+    await require_admin(x_user_id)
+    all_items = await db.work_items.find({}, {"_id": 0}).to_list(10000)
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    status_counts = {s: 0 for s in STATUSES}
+    total_minutes = 0.0
+    items_this_month = 0
+    closed_this_month = 0
+    creators = set()
+    for it in all_items:
+        status_counts[it.get("status", "Not Started")] = status_counts.get(it.get("status", "Not Started"), 0) + 1
+        total_minutes += it.get("time_taken_minutes", 0) or 0
+        if it.get("creator_id"):
+            creators.add(it["creator_id"])
+        if it.get("month") == current_month:
+            items_this_month += 1
+            if it.get("status") == "Closed":
+                closed_this_month += 1
+    needs_attention = status_counts.get("Ready for Review", 0) + status_counts.get("Changes Requested", 0)
+    return {
+        "total_items": len(all_items),
+        "status_counts": status_counts,
+        "total_hours_logged": round(total_minutes / 60, 1),
+        "items_this_month": items_this_month,
+        "closed_this_month": closed_this_month,
+        "active_members": len(creators),
+        "needs_attention_count": needs_attention,
+    }
+
+
+@api_router.get("/dashboard/team-summary")
+async def dashboard_team_summary(x_user_id: Optional[str] = Header(default=None)):
+    await require_admin(x_user_id)
+    users = await db.users.find({"role": {"$ne": "admin"}}, {"_id": 0}).to_list(1000)
+    all_items = await db.work_items.find({}, {"_id": 0}).to_list(10000)
+    result = []
+    for u in users:
+        user_items = [it for it in all_items if it.get("creator_id") == u["id"]]
+        status_counts = {s: 0 for s in STATUSES}
+        total_minutes = 0.0
+        for it in user_items:
+            status_counts[it.get("status", "Not Started")] = status_counts.get(it.get("status", "Not Started"), 0) + 1
+            total_minutes += it.get("time_taken_minutes", 0) or 0
+        result.append({
+            "user_id": u["id"],
+            "name": u["name"],
+            "role": u["role"],
+            "total_items": len(user_items),
+            "status_counts": status_counts,
+            "total_hours": round(total_minutes / 60, 1),
+        })
+    return result
+
+
+@api_router.get("/dashboard/attention-items")
+async def dashboard_attention_items(x_user_id: Optional[str] = Header(default=None)):
+    await require_admin(x_user_id)
+    items = await db.work_items.find(
+        {"status": {"$in": ["Ready for Review", "Changes Requested"]}}, {"_id": 0}
+    ).sort("updated_at", 1).to_list(50)
+    users = {u["id"]: u["name"] for u in await db.users.find({}, {"_id": 0}).to_list(1000)}
+    for it in items:
+        it["creator_name"] = users.get(it.get("creator_id"), "Unassigned")
+    return items
 
 
 app.include_router(api_router)

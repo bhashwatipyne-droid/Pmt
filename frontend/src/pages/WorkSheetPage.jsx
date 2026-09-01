@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useUser } from "@/context/UserContext";
-import { createWorkItem, deleteWorkItem, getOptions, getWorkItems, updateWorkItem } from "@/services/api";
+import {
+  bulkDeleteWorkItems,
+  bulkUpdateWorkItems,
+  createWorkItem,
+  deleteWorkItem,
+  getOptions,
+  getWorkItems,
+  updateWorkItem,
+} from "@/services/api";
 import { WorkSheetToolbar } from "@/components/work-sheet/WorkSheetToolbar";
 import { WorkSheetTable } from "@/components/work-sheet/WorkSheetTable";
-import { RoleSwitcher } from "@/components/layout/RoleSwitcher";
+import { BulkActionBar } from "@/components/work-sheet/BulkActionBar";
 import { toast } from "@/components/ui/sonner";
 import { WORKSHEET } from "@/constants/testIds";
 
@@ -15,6 +23,7 @@ export default function WorkSheetPage() {
   const [options, setOptions] = useState({});
   const [filters, setFilters] = useState(emptyFilters);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => {
     getOptions().then(setOptions);
@@ -32,6 +41,7 @@ export default function WorkSheetPage() {
 
   useEffect(() => {
     fetchItems();
+    setSelectedIds([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, filters]);
 
@@ -72,30 +82,43 @@ export default function WorkSheetPage() {
     }
   };
 
-  const myRowsCount = useMemo(
-    () => (currentUser ? items.filter((i) => i.creator_id === currentUser.id).length : 0),
-    [items, currentUser]
-  );
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => (prev.length === items.length ? [] : items.map((i) => i.id)));
+  };
+
+  const handleBulkStatus = async (status) => {
+    try {
+      const updated = await bulkUpdateWorkItems(currentUser.id, selectedIds, { status });
+      const byId = Object.fromEntries(updated.map((u) => [u.id, u]));
+      setItems((prev) => prev.map((it) => byId[it.id] || it));
+      toast.success(`Updated ${updated.length} row${updated.length === 1 ? "" : "s"}`);
+      setSelectedIds([]);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Bulk update failed");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      const { deleted_count } = await bulkDeleteWorkItems(currentUser.id, selectedIds);
+      setItems((prev) => prev.filter((it) => !selectedIds.includes(it.id)));
+      toast.success(`Deleted ${deleted_count} row${deleted_count === 1 ? "" : "s"}`);
+      setSelectedIds([]);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Bulk delete failed");
+    }
+  };
 
   if (userLoading || !currentUser) {
     return <div className="flex h-screen items-center justify-center text-muted-foreground">Loading work sheet...</div>;
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="flex items-center justify-between bg-gradient-to-r from-teal-800 to-teal-700 px-5 py-3 text-white shadow-sm">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">WorkSheet</h1>
-          <p className="text-xs text-teal-100/80">Spreadsheet-first work tracking</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <span data-testid={WORKSHEET.myRowsCount} className="hidden md:inline text-xs text-teal-100/80">
-            {currentUser.role === "member" ? `${myRowsCount} of my rows` : `${items.length} total rows`}
-          </span>
-          <RoleSwitcher />
-        </div>
-      </header>
-
+    <div className="flex h-full flex-col bg-background">
       <WorkSheetToolbar
         filters={filters}
         setFilters={setFilters}
@@ -104,6 +127,17 @@ export default function WorkSheetPage() {
         canAdd={true}
         resultCount={items.length}
       />
+
+      {selectedIds.length > 0 && (
+        <BulkActionBar
+          selectedCount={selectedIds.length}
+          currentUser={currentUser}
+          options={options}
+          onApplyStatus={handleBulkStatus}
+          onDelete={handleBulkDelete}
+          onClear={() => setSelectedIds([])}
+        />
+      )}
 
       {loading ? (
         <div data-testid={WORKSHEET.loadingState} className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -117,6 +151,9 @@ export default function WorkSheetPage() {
           options={options}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleSelectAll={toggleSelectAll}
         />
       )}
     </div>
