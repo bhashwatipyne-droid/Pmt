@@ -88,15 +88,8 @@ export default function WorkSheetPage() {
 
   const handleBulkAddRows = async (count) => {
     try {
-      const template = {
-        work_date: new Date().toISOString().slice(0, 10),
-        project_id: localStorage.getItem(LS.project) || null,
-        deliverable_id: localStorage.getItem(LS.deliverable) || null,
-        stage: localStorage.getItem(LS.stage) || null,
-        work_category: "Core",
-        status: "Not Started",
-      };
-      const created = await bulkCreateWorkItems(currentUser.id, count, template);
+      // Empty rows only — no sticky context, no project/deliverable/stage prefill
+      const created = await bulkCreateWorkItems(currentUser.id, count, {});
       setItems((prev) => [...created, ...prev]);
       toast.success(`${created.length} rows added`);
     } catch (e) {
