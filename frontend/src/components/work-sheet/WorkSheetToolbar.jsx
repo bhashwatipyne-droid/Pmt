@@ -6,7 +6,7 @@ import { WORKSHEET } from "@/constants/testIds";
 
 const ALL_VALUE = "__all__";
 
-export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAdd, resultCount, onBulkAdd }) => {
+export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAdd, resultCount, onBulkAdd, bulkAdding }) => {
   const update = (key, value) => setFilters((f) => ({ ...f, [key]: value === ALL_VALUE ? "" : value }));
 
   const clear = () => setFilters({ search: "", status: "", deliverable_type: "", work_category: "", month: "" });
@@ -79,11 +79,12 @@ export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAd
         <Button
           data-testid="worksheet-bulk-add-rows-btn"
           onClick={() => onBulkAdd(100)}
+          disabled={bulkAdding}
           size="sm"
           variant="outline"
           className="ml-auto h-9"
         >
-          <Rows3 className="mr-1 h-4 w-4" /> Add 100 rows below
+          <Rows3 className="mr-1 h-4 w-4" /> {bulkAdding ? "Adding rows..." : "Add 100 rows below"}
         </Button>
       )}
 

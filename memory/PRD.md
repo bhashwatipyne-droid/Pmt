@@ -90,6 +90,8 @@ User (id, name, email, role ∈ {admin, manager, member}, department, active)
 - **Sheet-like inline row entry**: replaced "Add Row" button with a draft row at the top of the sheet. Any field change triggers row creation on blur (like Google Sheets). Sticky project/deliverable/stage context carried across new rows via localStorage.
 - **Client Editing**: pencil icon on Clients opens a proper Edit modal with rename, contact update, and Archive/Restore. Backend PATCH /api/clients/{id} added, admin-only.
 - **Work-items filtering**: /api/work-items now supports `project_id` and `deliverable_id` query params for the project detail view.
+- **"Add 100 rows below"** bulk-add button on Work Sheet toolbar.
+- **FIXED (2026-09-01) — "Add 100 rows" prefilled-rows bug**: RCA showed the frontend/backend were already correctly sending an empty template (project_id/deliverable_id/stage = null); the perceived bug was ~1100 leftover junk/duplicate rows accumulated in the DB from earlier repro/testing sessions (both a real pre-fix bug run and repeated agent test clicks), which mixed old prefilled rows with new correct empty ones and made the sheet slow/confusing. Cleaned DB back to 10 legitimate seed rows. Hardened the bulk-add button with a `useRef` synchronous guard + `disabled` state (`bulkAdding`) to prevent any future double-submit. Verified via testing_agent iteration_5 (100% pass — 6/6 backend pytest, full frontend Playwright regression, smoke test on Dashboard/Projects/Team/Approvals/Clients).
 
 ## Backlog / next candidates (P1)
 - **CSV/XLSX import** for historical work items (user will supply cleaned file).

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/context/UserContext";
 import {
   bulkDeleteWorkItems,
@@ -30,6 +30,8 @@ export default function WorkSheetPage() {
   const [filters, setFilters] = useState(emptyFilters);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkAdding, setBulkAdding] = useState(false);
+  const bulkAddingRef = useRef(false);
 
   useEffect(() => { getOptions().then(setOptions); }, []);
 
@@ -87,6 +89,9 @@ export default function WorkSheetPage() {
   };
 
   const handleBulkAddRows = async (count) => {
+    if (bulkAddingRef.current) return; // synchronous guard — blocks rapid/duplicate clicks before React re-renders
+    bulkAddingRef.current = true;
+    setBulkAdding(true);
     try {
       // Empty rows only — no sticky context, no project/deliverable/stage prefill
       const created = await bulkCreateWorkItems(currentUser.id, count, {});
@@ -94,6 +99,9 @@ export default function WorkSheetPage() {
       toast.success(`${created.length} rows added`);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Could not add rows");
+    } finally {
+      bulkAddingRef.current = false;
+      setBulkAdding(false);
     }
   };
 
@@ -174,6 +182,7 @@ export default function WorkSheetPage() {
         canAdd={false}
         resultCount={items.length}
         onBulkAdd={handleBulkAddRows}
+        bulkAdding={bulkAdding}
       />
 
       {selectedIds.length > 0 && (
