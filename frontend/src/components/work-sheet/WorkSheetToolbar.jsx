@@ -1,12 +1,12 @@
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Rows3 } from "lucide-react";
 import { WORKSHEET } from "@/constants/testIds";
 
 const ALL_VALUE = "__all__";
 
-export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAdd, resultCount }) => {
+export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAdd, resultCount, onBulkAdd }) => {
   const update = (key, value) => setFilters((f) => ({ ...f, [key]: value === ALL_VALUE ? "" : value }));
 
   const clear = () => setFilters({ search: "", status: "", deliverable_type: "", work_category: "", month: "" });
@@ -75,8 +75,20 @@ export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAd
 
       <span className="text-xs text-muted-foreground">{resultCount} row{resultCount === 1 ? "" : "s"}</span>
 
+      {onBulkAdd && (
+        <Button
+          data-testid="worksheet-bulk-add-rows-btn"
+          onClick={() => onBulkAdd(100)}
+          size="sm"
+          variant="outline"
+          className="ml-auto h-9"
+        >
+          <Rows3 className="mr-1 h-4 w-4" /> Add 100 rows below
+        </Button>
+      )}
+
       {canAdd && (
-        <Button data-testid={WORKSHEET.addRowBtn} onClick={onAddRow} size="sm" className="ml-auto h-9 bg-teal-700 hover:bg-teal-800">
+        <Button data-testid={WORKSHEET.addRowBtn} onClick={onAddRow} size="sm" className={`h-9 bg-teal-700 hover:bg-teal-800 ${onBulkAdd ? "" : "ml-auto"}`}>
           <Plus className="mr-1 h-4 w-4" /> Add Row
         </Button>
       )}

@@ -3,6 +3,7 @@ import { useUser } from "@/context/UserContext";
 import {
   bulkDeleteWorkItems,
   bulkUpdateWorkItems,
+  bulkCreateWorkItems,
   createWorkItem,
   deleteWorkItem,
   getOptions,
@@ -85,6 +86,24 @@ export default function WorkSheetPage() {
     }
   };
 
+  const handleBulkAddRows = async (count) => {
+    try {
+      const template = {
+        work_date: new Date().toISOString().slice(0, 10),
+        project_id: localStorage.getItem(LS.project) || null,
+        deliverable_id: localStorage.getItem(LS.deliverable) || null,
+        stage: localStorage.getItem(LS.stage) || null,
+        work_category: "Core",
+        status: "Not Started",
+      };
+      const created = await bulkCreateWorkItems(currentUser.id, count, template);
+      setItems((prev) => [...created, ...prev]);
+      toast.success(`${created.length} rows added`);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Could not add rows");
+    }
+  };
+
   const handleUpdate = async (id, patch) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
     // Sticky context — persist last used project/deliverable/stage
@@ -161,6 +180,7 @@ export default function WorkSheetPage() {
         onAddRow={handleAddRow}
         canAdd={false}
         resultCount={items.length}
+        onBulkAdd={handleBulkAddRows}
       />
 
       {selectedIds.length > 0 && (

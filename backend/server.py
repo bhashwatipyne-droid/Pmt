@@ -174,6 +174,11 @@ class BulkDeletePayload(BaseModel):
     ids: List[str]
 
 
+class BulkCreatePayload(BaseModel):
+    count: int = 100
+    template: Optional[WorkItemCreate] = None
+
+
 class Client(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: f"client-{uuid.uuid4().hex[:8]}")
@@ -381,6 +386,31 @@ async def update_work_item(item_id: str, payload: WorkItemUpdate, x_user_id: Opt
     await db.work_items.update_one({"id": item_id}, {"$set": update_fields})
     updated = await db.work_items.find_one({"id": item_id}, {"_id": 0})
     return updated
+
+
+@api_router.post("/work-items/bulk-create", response_model=List[WorkItem])
+async def bulk_create_work_items(payload: BulkCreatePayload, x_user_id: Optional[str] = Header(default=None)):
+    user = await get_acting_user(x_user_id)
+    if payload.count < 1 or payload.count > 500:
+        raise HTTPException(status_code=400, detail="count must be between 1 and 500")
+    tpl = (payload.template or WorkItemCreate()).model_dump()
+    work_date = tpl.pop("work_date", None) or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    month = work_date[:7]
+    ts = now_iso()
+    docs = []
+    for _ in range(payload.count):
+        data = dict(tpl)
+        if user.role == "member":
+            data["creator_id"] = user.id
+            data["reviewer_id"] = None
+            data["manager_id"] = None
+        else:
+            data["creator_id"] = data.get("creator_id") or user.id
+        item = WorkItem(work_date=work_date, month=month, created_at=ts, updated_at=ts, **data)
+        docs.append(item.model_dump())
+    if docs:
+        await db.work_items.insert_many(docs)
+    return docs
 
 
 @api_router.post("/work-items/bulk-update", response_model=List[WorkItem])

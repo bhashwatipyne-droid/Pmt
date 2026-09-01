@@ -22,6 +22,9 @@ export const updateWorkItem = (userId, id, payload) =>
 export const deleteWorkItem = (userId, id) =>
   axios.delete(`${API}/work-items/${id}`, { headers: authHeaders(userId) }).then((r) => r.data);
 
+export const bulkCreateWorkItems = (userId, count, template) =>
+  axios.post(`${API}/work-items/bulk-create`, { count, template }, { headers: authHeaders(userId) }).then((r) => r.data);
+
 export const bulkUpdateWorkItems = (userId, ids, patch) =>
   axios.post(`${API}/work-items/bulk-update`, { ids, patch }, { headers: authHeaders(userId) }).then((r) => r.data);
 
