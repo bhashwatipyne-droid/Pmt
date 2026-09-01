@@ -25,7 +25,37 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
 # ---------------- Constants ----------------
-DELIVERABLE_TYPES = ["Blog Post", "Social Media Post", "Design Asset", "Video", "Presentation", "Report", "Email Campaign", "Other"]
+DELIVERABLE_TYPES = [
+    "Internal Meets & Discussions",
+    "Client Meets & Discussions",
+    "Other Initiatives",
+    "Manager: Team Reviews / Feedback",
+    "Freelance: Reviews / Feedback",
+    "Campaign Ideation Plan",
+    "Campaign Ideation Plan (Quantitative Analysis)",
+    "Campaign Ideation Plan (Content Peer Analysis)",
+    "Campaign Ideation Plan (Keywords / Key Visual Taglines)",
+    "Internal Feedback Implementation",
+    "External Feedback Implementation",
+    "Internal Review (Design / Animation Team)",
+    "Teaser",
+    "Minimalist",
+    "Emailers",
+    "Newsletters",
+    "Carousel",
+    "Infographic",
+    "Brochure",
+    "Booklet",
+    "Presentation (PPT) - Per Slide",
+    "Typeform / Polls / Quiz",
+    "Collateral",
+    "GIF",
+    "Reel / Short Video",
+    "Long Video",
+    "Data Research and Analysis (SMI)",
+    "Data Research and Analysis (Web)",
+    "Data Updation",
+]
 WORK_CATEGORIES = ["Core", "Non-Core"]
 STATUSES = ["Not Started", "Ongoing", "Ready for Review", "Changes Requested", "Closed"]
 MEMBER_FORWARD_STATUSES = ["Not Started", "Ongoing", "Ready for Review"]
@@ -289,6 +319,8 @@ async def list_work_items(
     month: Optional[str] = None,
     search: Optional[str] = None,
     creator_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    deliverable_id: Optional[str] = None,
     x_user_id: Optional[str] = Header(default=None),
 ):
     user = await get_acting_user(x_user_id)
@@ -305,6 +337,10 @@ async def list_work_items(
         query["work_category"] = work_category
     if month:
         query["month"] = month
+    if project_id:
+        query["project_id"] = project_id
+    if deliverable_id:
+        query["deliverable_id"] = deliverable_id
     if search:
         query["$or"] = [
             {"deliverable_name": {"$regex": search, "$options": "i"}},
@@ -462,6 +498,25 @@ async def create_client(payload: ClientCreate, x_user_id: Optional[str] = Header
     c = Client(**payload.model_dump())
     await db.clients.insert_one(c.model_dump())
     return c
+
+
+class ClientUpdate(BaseModel):
+    name: Optional[str] = None
+    contact_person: Optional[str] = None
+    status: Optional[str] = None
+
+
+@api_router.patch("/clients/{client_id}", response_model=Client)
+async def update_client(client_id: str, payload: ClientUpdate, x_user_id: Optional[str] = Header(default=None)):
+    await require_admin(x_user_id)
+    existing = await db.clients.find_one({"id": client_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Client not found")
+    update_fields = payload.model_dump(exclude_unset=True)
+    if "status" in update_fields and update_fields["status"] not in CLIENT_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid client status")
+    await db.clients.update_one({"id": client_id}, {"$set": update_fields})
+    return Client(**{**existing, **update_fields})
 
 
 # ---------------- Projects ----------------

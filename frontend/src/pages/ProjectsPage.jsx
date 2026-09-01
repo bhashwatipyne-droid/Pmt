@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Search, Plus, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useUser } from "@/context/UserContext";
@@ -17,6 +17,7 @@ import { ProjectListTable } from "@/components/projects/ProjectListTable";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 
 export default function ProjectsPage() {
+  const navigate = useNavigate();
   const { currentUser, currentUserId, users, loading: userLoading } = useUser();
   const [projects, setProjects] = useState([]);
   const [metrics, setMetrics] = useState(null);
@@ -170,12 +171,12 @@ export default function ProjectsPage() {
               status={s}
               projects={byStatus[s]}
               users={users}
-              onOpenProject={() => toast("Project detail view coming next phase")}
+              onOpenProject={(p) => navigate(`/projects/${p.id}`)}
             />
           ))}
         </div>
       ) : (
-        <ProjectListTable projects={filtered} users={users} onOpenProject={() => toast("Project detail view coming next phase")} />
+        <ProjectListTable projects={filtered} users={users} onOpenProject={(p) => navigate(`/projects/${p.id}`)} />
       )}
 
       <CreateProjectModal

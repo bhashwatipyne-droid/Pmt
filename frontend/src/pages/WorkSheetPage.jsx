@@ -74,6 +74,17 @@ export default function WorkSheetPage() {
     }
   };
 
+  const handleCreateFromDraft = async (payload) => {
+    try {
+      const created = await createWorkItem(currentUser.id, payload);
+      setItems((prev) => [created, ...prev]);
+      toast.success("Row added");
+      return created;
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Could not add row");
+    }
+  };
+
   const handleUpdate = async (id, patch) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
     // Sticky context — persist last used project/deliverable/stage
@@ -148,7 +159,7 @@ export default function WorkSheetPage() {
         setFilters={setFilters}
         options={options}
         onAddRow={handleAddRow}
-        canAdd={true}
+        canAdd={false}
         resultCount={items.length}
       />
 
@@ -180,6 +191,7 @@ export default function WorkSheetPage() {
           deliverables={deliverables}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
+          onCreate={handleCreateFromDraft}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}

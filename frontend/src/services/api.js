@@ -44,6 +44,9 @@ export const getClients = () => axios.get(`${API}/clients`).then((r) => r.data);
 export const createClient = (userId, payload) =>
   axios.post(`${API}/clients`, payload, { headers: authHeaders(userId) }).then((r) => r.data);
 
+export const updateClient = (userId, id, payload) =>
+  axios.patch(`${API}/clients/${id}`, payload, { headers: authHeaders(userId) }).then((r) => r.data);
+
 // -------- Projects --------
 export const getProjects = (userId, params) =>
   axios.get(`${API}/projects`, { headers: authHeaders(userId), params }).then((r) => r.data);

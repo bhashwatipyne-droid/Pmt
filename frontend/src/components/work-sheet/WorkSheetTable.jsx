@@ -1,20 +1,12 @@
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Checkbox } from "../ui/checkbox";
 import { WorkSheetRow } from "./WorkSheetRow";
+import { DraftWorkSheetRow } from "./DraftWorkSheetRow";
 import { WORKSHEET } from "@/constants/testIds";
 
 const COLUMNS = ["Date", "Project", "Deliverable Link", "Stage", "Deliverable", "Type", "Category", "Version", "Time (min)", "Creator", "Reviewer", "Remarks", "Status"];
 
-export const WorkSheetTable = ({ items, currentUser, users, options, projects, deliverables, onUpdate, onDelete, selectedIds, onToggleSelect, onToggleSelectAll }) => {
-  if (!items.length) {
-    return (
-      <div data-testid={WORKSHEET.emptyState} className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-        <p className="text-sm font-medium text-foreground">No work items yet</p>
-        <p className="text-xs text-muted-foreground">Add a row to start tracking work.</p>
-      </div>
-    );
-  }
-
+export const WorkSheetTable = ({ items, currentUser, users, options, projects, deliverables, onUpdate, onDelete, onCreate, selectedIds, onToggleSelect, onToggleSelectAll }) => {
   const allSelected = items.length > 0 && selectedIds.length === items.length;
 
   return (
@@ -27,6 +19,7 @@ export const WorkSheetTable = ({ items, currentUser, users, options, projects, d
                 data-testid="worksheet-select-all-checkbox"
                 checked={allSelected}
                 onCheckedChange={onToggleSelectAll}
+                disabled={items.length === 0}
               />
             </TableHead>
             {COLUMNS.map((c) => (
@@ -36,21 +29,39 @@ export const WorkSheetTable = ({ items, currentUser, users, options, projects, d
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item) => (
-            <WorkSheetRow
-              key={item.id}
-              item={item}
-              currentUser={currentUser}
-              users={users}
-              options={options}
-              projects={projects}
-              deliverables={deliverables}
-              onUpdate={onUpdate}
-              onDelete={onDelete}
-              selected={selectedIds.includes(item.id)}
-              onToggleSelect={onToggleSelect}
-            />
-          ))}
+          {/* Inline draft row — always shown; typing into any field creates the row */}
+          <DraftWorkSheetRow
+            currentUser={currentUser}
+            users={users}
+            options={options}
+            projects={projects}
+            deliverables={deliverables}
+            onCreate={onCreate}
+          />
+          {items.length === 0 ? (
+            <TableRow>
+              <td colSpan={COLUMNS.length + (currentUser.role === "admin" ? 2 : 1)} data-testid={WORKSHEET.emptyState} className="py-16 text-center">
+                <p className="text-sm font-medium text-foreground">No work items yet</p>
+                <p className="text-xs text-muted-foreground">Start typing in the top row above to add your first entry.</p>
+              </td>
+            </TableRow>
+          ) : (
+            items.map((item) => (
+              <WorkSheetRow
+                key={item.id}
+                item={item}
+                currentUser={currentUser}
+                users={users}
+                options={options}
+                projects={projects}
+                deliverables={deliverables}
+                onUpdate={onUpdate}
+                onDelete={onDelete}
+                selected={selectedIds.includes(item.id)}
+                onToggleSelect={onToggleSelect}
+              />
+            ))
+          )}
         </TableBody>
       </Table>
     </div>
