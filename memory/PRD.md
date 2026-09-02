@@ -97,13 +97,23 @@ User (id, name, email, role ∈ {admin, manager, member}, department, active)
 - **CSV/XLSX import** for historical work items (user will supply cleaned file).
 - **Export** Sheet to CSV/Excel.
 - **Deliverable CRUD from Project Detail** (add/edit/delete deliverables directly in a project).
-- **Real auth** (registration + admin approval + roles) — must go through integration playbook.
 - Activity history / audit log on deliverables and work items.
 - Notifications (in-app for approvals & new assignments).
 - Refactor: split `server.py` into routers (users, projects, deliverables, approvals, dashboard, work_items).
 - **Deferred (paused by user)**: 4-segment progress bar per deliverable (Content/Design/Animate/Finish) on Dashboard/Project Detail, showing current-stage-in-progress vs closed.
 - **Open question for user**: since Admin's Work Sheet is now fully view-only, the pre-existing admin-only single-row delete (trash icon) and bulk-delete-selected are now unreachable via UI (backend still restricts delete to admin role, unchanged). No other role was given delete rights. Flag to user: should delete rights move to Manager (own department) or stay admin-only/unused for now?
 - Deliverable Type dropdown is still shared (all 29 types) across all departments — user explicitly deferred per-department splitting until after beta testing.
+- Forgot/reset-password flow — explicitly not required by user for now.
+- "Create user with password" UI on Team page — explicitly deferred; admin sets password_hash directly in MongoDB for new users for now.
+
+## Recent additions (Sep 2026) — Real JWT auth (replaces mock role-switcher)
+- **Simple email/password sign-in** (JWT, httpOnly cookie, 24h expiry, bcrypt password hashing) — NO registration, NO Google/OAuth, per explicit user request. New endpoints: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`.
+- **Mock "Acting As" role-switcher fully removed** (`RoleSwitcher.jsx` deleted, `localStorage acting_user_id` gone). `UserContext.jsx` is now a real AuthContext (same `currentUser/currentUserId/users/loading` shape so no page-level changes needed) with `login()`/`logout()`/`isAuthenticated`.
+- **All ~28 backend endpoints** refactored from `X-User-Id` header mock-auth to `request: Request` + `get_acting_user(request)` reading the JWT cookie (falls back to `Authorization: Bearer` header for API/testing convenience). Every business endpoint now requires a valid session (401 otherwise), including `/api/clients` and `/api/users`.
+- **6 seed users given demo passwords** on startup (idempotent, won't overwrite if changed): aisha@thefinpedia.com/admin123, rahul@thefinpedia.com/manager123, priya@thefinpedia.com/manager123, sam@thefinpedia.com/member123, neha@thefinpedia.com/member123, vikram@thefinpedia.com/member123. See `/app/memory/test_credentials.md`.
+- **New LoginPage.jsx** — simple centered dark-navy sign-in card matching sidebar branding. Sidebar "Logout" button now functional (was disabled placeholder).
+- `CORS_ORIGINS` tightened from `*` to the explicit preview host (was a latent issue with `allow_credentials=True`).
+- Verified via testing_agent iteration_8 (100% pass — 31/31 backend pytest incl. all 6 logins + permission-model regression, full frontend Playwright). Two minor follow-ups (protect `/api/clients` GET, tighten CORS_ORIGINS) applied post-test and re-verified via curl.
 
 ## Recent additions (Sep 2026) — Admin view-only + department-scoped editing
 - **Admin Work Sheet = fully view-only**: no draft row, no Add-Row/Add-100-rows/Close-Deliverable buttons, every cell (including checkboxes) disabled. Enforced both frontend (render-level) and backend (`POST/PATCH/bulk-create /work-items` return 403 for admin role).

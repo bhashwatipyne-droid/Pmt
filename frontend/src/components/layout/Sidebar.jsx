@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Megaphone, Users, CheckSquare, Building2, Table2, LogOut, Layers } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import { LAYOUT } from "@/constants/testIds";
@@ -11,9 +11,15 @@ const navItemClass = ({ isActive }) =>
   }`;
 
 export const Sidebar = () => {
-  const { currentUser } = useUser();
+  const { currentUser, logout } = useUser();
+  const navigate = useNavigate();
   const isAdmin = currentUser?.role === "admin";
   const initial = (currentUser?.name || "?").trim().charAt(0).toUpperCase();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
 
   return (
     <aside className="flex w-60 flex-shrink-0 flex-col bg-[#0b1e39] px-4 py-5">
@@ -77,9 +83,8 @@ export const Sidebar = () => {
         )}
         <button
           data-testid="sidebar-logout-btn"
-          disabled
-          title="Auth coming later"
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-800/60 px-3 py-2.5 text-sm font-medium text-slate-300 opacity-70"
+          onClick={handleLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-800/60 px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800"
         >
           <LogOut className="h-4 w-4" />
           Logout

@@ -75,7 +75,7 @@ export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAd
         type="month"
         value={filters.month}
         onChange={(e) => update("month", e.target.value)}
-        className="h-9 w-[150px]"
+        className="h-9 w-[170px]"
       />
 
       {hasFilters && (

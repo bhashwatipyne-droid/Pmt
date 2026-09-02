@@ -83,7 +83,7 @@ export const DeliverableModal = ({ open, mode, projectId, initial, users, onClos
         </div>
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Task Name *</label>
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Name *</label>
             <input data-testid="deliverable-modal-name" value={name} onChange={(e) => setName(e.target.value)} className={inputBase} placeholder="e.g. Module 1 video" />
           </div>
           <div className="grid grid-cols-2 gap-3">

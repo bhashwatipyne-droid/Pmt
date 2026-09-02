@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,6 +6,8 @@ import os
 import logging
 import string
 import random
+import bcrypt
+import jwt
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
@@ -252,13 +254,54 @@ class Deliverable(BaseModel):
     updated_at: str
 
 
+# ---------------- Auth helpers ----------------
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_HOURS = 24
+DEMO_PASSWORDS = {
+    "admin-1": "admin123",
+    "manager-1": "manager123",
+    "manager-2": "manager123",
+    "member-1": "member123",
+    "member-2": "member123",
+    "member-3": "member123",
+}
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not hashed_password:
+        return False
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
+
+def create_access_token(user_id: str) -> str:
+    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_HOURS)}
+    return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
+
+
 # ---------------- Helpers ----------------
-async def get_acting_user(x_user_id: Optional[str] = Header(default=None)) -> User:
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Missing X-User-Id header")
-    doc = await db.users.find_one({"id": x_user_id}, {"_id": 0})
+async def get_acting_user(request: Request) -> User:
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Session expired, please log in again")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    doc = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
     if not doc:
-        raise HTTPException(status_code=404, detail="Acting user not found")
+        raise HTTPException(status_code=401, detail="User not found")
+    if not doc.get("active", True):
+        raise HTTPException(status_code=401, detail="Account deactivated")
     return User(**doc)
 
 
@@ -290,8 +333,8 @@ def scoped_update_fields(user: User, existing: dict, update_fields: dict, creato
     return update_fields
 
 
-async def require_admin(x_user_id: Optional[str] = Header(default=None)) -> User:
-    user = await get_acting_user(x_user_id)
+async def require_admin(request: Request) -> User:
+    user = await get_acting_user(request)
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access only")
     return user
@@ -310,8 +353,46 @@ async def root():
     return {"message": "Work Sheet API"}
 
 
+class LoginPayload(BaseModel):
+    email: str
+    password: str
+
+
+@api_router.post("/auth/login", response_model=User)
+async def login(payload: LoginPayload, response: Response):
+    email = payload.email.strip().lower()
+    doc = await db.users.find_one({"email": email}, {"_id": 0})
+    if not doc or not verify_password(payload.password, doc.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not doc.get("active", True):
+        raise HTTPException(status_code=403, detail="Account deactivated")
+    token = create_access_token(doc["id"])
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_HOURS * 3600,
+        path="/",
+    )
+    return User(**doc)
+
+
+@api_router.post("/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie(key="access_token", path="/")
+    return {"message": "Logged out"}
+
+
+@api_router.get("/auth/me", response_model=User)
+async def me(request: Request):
+    return await get_acting_user(request)
+
+
 @api_router.get("/users", response_model=List[User])
-async def list_users():
+async def list_users(request: Request):
+    await get_acting_user(request)
     return await db.users.find({}, {"_id": 0}).to_list(1000)
 
 
@@ -333,6 +414,7 @@ async def get_options():
 
 @api_router.get("/work-items", response_model=List[WorkItem])
 async def list_work_items(
+    request: Request,
     status: Optional[str] = None,
     deliverable_type: Optional[str] = None,
     work_category: Optional[str] = None,
@@ -341,9 +423,8 @@ async def list_work_items(
     creator_id: Optional[str] = None,
     project_id: Optional[str] = None,
     deliverable_id: Optional[str] = None,
-    x_user_id: Optional[str] = Header(default=None),
 ):
-    await get_acting_user(x_user_id)
+    await get_acting_user(request)
     query = {}
     # Everyone can see everyone's rows; only editing is restricted by role/department.
     if creator_id:
@@ -370,8 +451,8 @@ async def list_work_items(
 
 
 @api_router.post("/work-items", response_model=WorkItem)
-async def create_work_item(payload: WorkItemCreate, x_user_id: Optional[str] = Header(default=None)):
-    user = await get_acting_user(x_user_id)
+async def create_work_item(payload: WorkItemCreate, request: Request):
+    user = await get_acting_user(request)
     if user.role == "admin":
         raise HTTPException(status_code=403, detail="Admins have view-only access to the Work Sheet")
     data = payload.model_dump()
@@ -390,8 +471,8 @@ async def create_work_item(payload: WorkItemCreate, x_user_id: Optional[str] = H
 
 
 @api_router.patch("/work-items/{item_id}", response_model=WorkItem)
-async def update_work_item(item_id: str, payload: WorkItemUpdate, x_user_id: Optional[str] = Header(default=None)):
-    user = await get_acting_user(x_user_id)
+async def update_work_item(item_id: str, payload: WorkItemUpdate, request: Request):
+    user = await get_acting_user(request)
     existing = await db.work_items.find_one({"id": item_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Work item not found")
@@ -406,8 +487,8 @@ async def update_work_item(item_id: str, payload: WorkItemUpdate, x_user_id: Opt
 
 
 @api_router.post("/work-items/bulk-create", response_model=List[WorkItem])
-async def bulk_create_work_items(payload: BulkCreatePayload, x_user_id: Optional[str] = Header(default=None)):
-    user = await get_acting_user(x_user_id)
+async def bulk_create_work_items(payload: BulkCreatePayload, request: Request):
+    user = await get_acting_user(request)
     if user.role == "admin":
         raise HTTPException(status_code=403, detail="Admins have view-only access to the Work Sheet")
     if payload.count < 1 or payload.count > 500:
@@ -433,8 +514,8 @@ async def bulk_create_work_items(payload: BulkCreatePayload, x_user_id: Optional
 
 
 @api_router.post("/work-items/bulk-update", response_model=List[WorkItem])
-async def bulk_update_work_items(payload: BulkUpdatePayload, x_user_id: Optional[str] = Header(default=None)):
-    user = await get_acting_user(x_user_id)
+async def bulk_update_work_items(payload: BulkUpdatePayload, request: Request):
+    user = await get_acting_user(request)
     raw_fields = payload.patch.model_dump(exclude_unset=True)
     updated_items = []
     for item_id in payload.ids:
@@ -453,15 +534,15 @@ async def bulk_update_work_items(payload: BulkUpdatePayload, x_user_id: Optional
 
 
 @api_router.post("/work-items/bulk-delete")
-async def bulk_delete_work_items(payload: BulkDeletePayload, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def bulk_delete_work_items(payload: BulkDeletePayload, request: Request):
+    await require_admin(request)
     result = await db.work_items.delete_many({"id": {"$in": payload.ids}})
     return {"deleted_count": result.deleted_count}
 
 
 @api_router.delete("/work-items/{item_id}")
-async def delete_work_item(item_id: str, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def delete_work_item(item_id: str, request: Request):
+    await require_admin(request)
     result = await db.work_items.delete_one({"id": item_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Work item not found")
@@ -470,8 +551,8 @@ async def delete_work_item(item_id: str, x_user_id: Optional[str] = Header(defau
 
 # ---------------- Dashboard ----------------
 @api_router.get("/dashboard/summary")
-async def dashboard_summary(x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def dashboard_summary(request: Request):
+    await require_admin(request)
     all_items = await db.work_items.find({}, {"_id": 0}).to_list(10000)
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
     status_counts = {s: 0 for s in STATUSES}
@@ -501,8 +582,8 @@ async def dashboard_summary(x_user_id: Optional[str] = Header(default=None)):
 
 
 @api_router.get("/dashboard/team-summary")
-async def dashboard_team_summary(x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def dashboard_team_summary(request: Request):
+    await require_admin(request)
     users = await db.users.find({"role": {"$ne": "admin"}}, {"_id": 0}).to_list(1000)
     all_items = await db.work_items.find({}, {"_id": 0}).to_list(10000)
     result = []
@@ -525,8 +606,8 @@ async def dashboard_team_summary(x_user_id: Optional[str] = Header(default=None)
 
 
 @api_router.get("/dashboard/attention-items")
-async def dashboard_attention_items(x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def dashboard_attention_items(request: Request):
+    await require_admin(request)
     items = await db.work_items.find(
         {"status": {"$in": ["Ready for Review", "Changes Requested"]}}, {"_id": 0}
     ).sort("updated_at", 1).to_list(50)
@@ -538,13 +619,14 @@ async def dashboard_attention_items(x_user_id: Optional[str] = Header(default=No
 
 # ---------------- Clients ----------------
 @api_router.get("/clients", response_model=List[Client])
-async def list_clients():
+async def list_clients(request: Request):
+    await get_acting_user(request)
     return await db.clients.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
 
 
 @api_router.post("/clients", response_model=Client)
-async def create_client(payload: ClientCreate, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def create_client(payload: ClientCreate, request: Request):
+    await require_admin(request)
     c = Client(**payload.model_dump())
     await db.clients.insert_one(c.model_dump())
     return c
@@ -557,8 +639,8 @@ class ClientUpdate(BaseModel):
 
 
 @api_router.patch("/clients/{client_id}", response_model=Client)
-async def update_client(client_id: str, payload: ClientUpdate, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def update_client(client_id: str, payload: ClientUpdate, request: Request):
+    await require_admin(request)
     existing = await db.clients.find_one({"id": client_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -604,11 +686,11 @@ async def _hydrate_project(p: dict) -> dict:
 
 @api_router.get("/projects")
 async def list_projects(
+    request: Request,
     status: Optional[str] = None,
     search: Optional[str] = None,
-    x_user_id: Optional[str] = Header(default=None),
 ):
-    await get_acting_user(x_user_id)
+    await get_acting_user(request)
     query = {}
     if status:
         query["status"] = status
@@ -622,8 +704,8 @@ async def list_projects(
 
 
 @api_router.get("/projects/metrics")
-async def project_metrics(x_user_id: Optional[str] = Header(default=None)):
-    await get_acting_user(x_user_id)
+async def project_metrics(request: Request):
+    await get_acting_user(request)
     projects = await db.projects.find({}, {"_id": 0}).to_list(1000)
     deliverables = await db.deliverables.find({}, {"_id": 0}).to_list(5000)
     today = datetime.now(timezone.utc).date()
@@ -647,8 +729,8 @@ async def project_metrics(x_user_id: Optional[str] = Header(default=None)):
 
 
 @api_router.get("/projects/{project_id}")
-async def get_project(project_id: str, x_user_id: Optional[str] = Header(default=None)):
-    await get_acting_user(x_user_id)
+async def get_project(project_id: str, request: Request):
+    await get_acting_user(request)
     p = await db.projects.find_one({"id": project_id}, {"_id": 0})
     if not p:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -656,8 +738,8 @@ async def get_project(project_id: str, x_user_id: Optional[str] = Header(default
 
 
 @api_router.post("/projects")
-async def create_project(payload: ProjectCreate, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def create_project(payload: ProjectCreate, request: Request):
+    await require_admin(request)
     if payload.status and payload.status not in PROJECT_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid project status")
     client_doc = await db.clients.find_one({"id": payload.client_id}, {"_id": 0})
@@ -696,8 +778,8 @@ async def create_project(payload: ProjectCreate, x_user_id: Optional[str] = Head
 
 
 @api_router.patch("/projects/{project_id}")
-async def update_project(project_id: str, payload: ProjectUpdate, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def update_project(project_id: str, payload: ProjectUpdate, request: Request):
+    await require_admin(request)
     existing = await db.projects.find_one({"id": project_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -711,8 +793,8 @@ async def update_project(project_id: str, payload: ProjectUpdate, x_user_id: Opt
 
 
 @api_router.delete("/projects/{project_id}")
-async def delete_project(project_id: str, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def delete_project(project_id: str, request: Request):
+    await require_admin(request)
     result = await db.projects.delete_one({"id": project_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -744,17 +826,17 @@ class DeliverableUpdate(BaseModel):
 
 @api_router.get("/deliverables", response_model=List[Deliverable])
 async def list_deliverables(
+    request: Request,
     project_id: Optional[str] = None,
-    x_user_id: Optional[str] = Header(default=None),
 ):
-    await get_acting_user(x_user_id)
+    await get_acting_user(request)
     query = {"project_id": project_id} if project_id else {}
     return await db.deliverables.find(query, {"_id": 0}).sort("created_at", 1).to_list(5000)
 
 
 @api_router.post("/deliverables", response_model=Deliverable)
-async def create_deliverable(payload: DeliverableCreate, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def create_deliverable(payload: DeliverableCreate, request: Request):
+    await require_admin(request)
     if not await db.projects.find_one({"id": payload.project_id}, {"_id": 0}):
         raise HTTPException(status_code=400, detail="Project not found")
     ts = now_iso()
@@ -764,8 +846,8 @@ async def create_deliverable(payload: DeliverableCreate, x_user_id: Optional[str
 
 
 @api_router.patch("/deliverables/{deliverable_id}", response_model=Deliverable)
-async def update_deliverable(deliverable_id: str, payload: DeliverableUpdate, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def update_deliverable(deliverable_id: str, payload: DeliverableUpdate, request: Request):
+    await require_admin(request)
     existing = await db.deliverables.find_one({"id": deliverable_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Deliverable not found")
@@ -780,8 +862,8 @@ async def update_deliverable(deliverable_id: str, payload: DeliverableUpdate, x_
 
 
 @api_router.delete("/deliverables/{deliverable_id}")
-async def delete_deliverable(deliverable_id: str, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def delete_deliverable(deliverable_id: str, request: Request):
+    await require_admin(request)
     result = await db.deliverables.delete_one({"id": deliverable_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Deliverable not found")
@@ -790,8 +872,8 @@ async def delete_deliverable(deliverable_id: str, x_user_id: Optional[str] = Hea
 
 # ---------------- Team management (admin) ----------------
 @api_router.post("/users", response_model=User)
-async def create_user(payload: UserCreate, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def create_user(payload: UserCreate, request: Request):
+    await require_admin(request)
     if payload.role not in ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
     if payload.department and payload.department not in DEPARTMENTS:
@@ -811,8 +893,8 @@ async def create_user(payload: UserCreate, x_user_id: Optional[str] = Header(def
 
 
 @api_router.patch("/users/{user_id}", response_model=User)
-async def update_user(user_id: str, payload: UserUpdate, x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def update_user(user_id: str, payload: UserUpdate, request: Request):
+    await require_admin(request)
     existing = await db.users.find_one({"id": user_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
@@ -835,9 +917,9 @@ def _next_stage(stage: str) -> Optional[str]:
 
 
 @api_router.get("/approvals")
-async def list_approvals(x_user_id: Optional[str] = Header(default=None)):
+async def list_approvals(request: Request):
     """Deliverables waiting for review, hydrated with project + owner details."""
-    await get_acting_user(x_user_id)
+    await get_acting_user(request)
     delivs = await db.deliverables.find(
         {"stage_status": "Ready for Review"}, {"_id": 0}
     ).sort("updated_at", -1).to_list(500)
@@ -865,9 +947,9 @@ class ApprovalDecision(BaseModel):
 
 
 @api_router.post("/deliverables/{deliverable_id}/approve")
-async def approve_deliverable(deliverable_id: str, payload: ApprovalDecision, x_user_id: Optional[str] = Header(default=None)):
+async def approve_deliverable(deliverable_id: str, payload: ApprovalDecision, request: Request):
     """Advance to next stage; if at Finish, mark Completed."""
-    user = await get_acting_user(x_user_id)
+    user = await get_acting_user(request)
     if user.role not in ("admin", "manager"):
         raise HTTPException(status_code=403, detail="Only admin or manager can approve")
     existing = await db.deliverables.find_one({"id": deliverable_id}, {"_id": 0})
@@ -888,8 +970,8 @@ async def approve_deliverable(deliverable_id: str, payload: ApprovalDecision, x_
 
 
 @api_router.post("/deliverables/{deliverable_id}/reject")
-async def reject_deliverable(deliverable_id: str, payload: ApprovalDecision, x_user_id: Optional[str] = Header(default=None)):
-    user = await get_acting_user(x_user_id)
+async def reject_deliverable(deliverable_id: str, payload: ApprovalDecision, request: Request):
+    user = await get_acting_user(request)
     if user.role not in ("admin", "manager"):
         raise HTTPException(status_code=403, detail="Only admin or manager can reject")
     existing = await db.deliverables.find_one({"id": deliverable_id}, {"_id": 0})
@@ -908,8 +990,8 @@ async def reject_deliverable(deliverable_id: str, payload: ApprovalDecision, x_u
 
 # ---------------- Dashboard overview (project-centric) ----------------
 @api_router.get("/dashboard/overview")
-async def dashboard_overview(x_user_id: Optional[str] = Header(default=None)):
-    await require_admin(x_user_id)
+async def dashboard_overview(request: Request):
+    await require_admin(request)
     projects = await db.projects.find({}, {"_id": 0}).to_list(1000)
     deliverables = await db.deliverables.find({}, {"_id": 0}).to_list(5000)
     work_items = await db.work_items.find({}, {"_id": 0}).to_list(10000)
@@ -968,6 +1050,11 @@ logger = logging.getLogger(__name__)
 async def seed_data():
     for u in SEED_USERS:
         await db.users.update_one({"id": u["id"]}, {"$set": u}, upsert=True)
+        existing = await db.users.find_one({"id": u["id"]}, {"_id": 0, "password_hash": 1})
+        if not existing or not existing.get("password_hash"):
+            demo_password = DEMO_PASSWORDS.get(u["id"])
+            if demo_password:
+                await db.users.update_one({"id": u["id"]}, {"$set": {"password_hash": hash_password(demo_password)}})
     for c in SEED_CLIENTS:
         await db.clients.update_one({"id": c["id"]}, {"$set": c}, upsert=True)
 

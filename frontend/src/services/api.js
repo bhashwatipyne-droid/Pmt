@@ -3,9 +3,17 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
-const authHeaders = (userId) => (userId ? { "X-User-Id": userId } : {});
+axios.defaults.withCredentials = true;
+
+const authHeaders = () => ({});
 
 export const getUsers = () => axios.get(`${API}/users`).then((r) => r.data);
+
+export const loginUser = (email, password) => axios.post(`${API}/auth/login`, { email, password }).then((r) => r.data);
+
+export const logoutUser = () => axios.post(`${API}/auth/logout`, {}).then((r) => r.data);
+
+export const getMe = () => axios.get(`${API}/auth/me`).then((r) => r.data);
 
 export const getOptions = () => axios.get(`${API}/config/options`).then((r) => r.data);
 
