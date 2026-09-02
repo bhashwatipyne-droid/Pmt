@@ -5,7 +5,6 @@ import {
   bulkUpdateWorkItems,
   bulkCreateWorkItems,
   createWorkItem,
-  deleteWorkItem,
   getOptions,
   getWorkItems,
   updateWorkItem,
@@ -15,8 +14,10 @@ import {
 import { WorkSheetToolbar } from "@/components/work-sheet/WorkSheetToolbar";
 import { WorkSheetTable } from "@/components/work-sheet/WorkSheetTable";
 import { BulkActionBar } from "@/components/work-sheet/BulkActionBar";
+import { CloseDeliverableModal } from "@/components/work-sheet/CloseDeliverableModal";
 import { toast } from "sonner";
 import { WORKSHEET } from "@/constants/testIds";
+import { canEditWorkItem } from "@/lib/worksheetPermissions";
 
 const emptyFilters = { search: "", status: "", deliverable_type: "", work_category: "", month: "" };
 const LS = { project: "ws_last_project_id", deliverable: "ws_last_deliverable_id", stage: "ws_last_stage" };
@@ -31,7 +32,10 @@ export default function WorkSheetPage() {
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkAdding, setBulkAdding] = useState(false);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
   const bulkAddingRef = useRef(false);
+  const isAdmin = currentUser?.role === "admin";
+  const isManager = currentUser?.role === "manager";
 
   useEffect(() => { getOptions().then(setOptions); }, []);
 
@@ -120,18 +124,11 @@ export default function WorkSheetPage() {
     }
   };
 
-  const handleDelete = async (id) => {
-    try {
-      await deleteWorkItem(currentUser.id, id);
-      setItems((prev) => prev.filter((it) => it.id !== id));
-      toast.success("Row deleted");
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Delete failed");
-    }
-  };
-
   const toggleSelect = (id) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
-  const toggleSelectAll = () => setSelectedIds((prev) => (prev.length === items.length ? [] : items.map((i) => i.id)));
+  const toggleSelectAll = () => {
+    const editableIds = items.filter((it) => canEditWorkItem(currentUser, it, users)).map((it) => it.id);
+    setSelectedIds((prev) => (prev.length === editableIds.length ? [] : editableIds));
+  };
 
   const handleBulkStatus = async (status) => {
     try {
@@ -181,9 +178,23 @@ export default function WorkSheetPage() {
         onAddRow={handleAddRow}
         canAdd={false}
         resultCount={items.length}
-        onBulkAdd={handleBulkAddRows}
+        onBulkAdd={isAdmin ? undefined : handleBulkAddRows}
         bulkAdding={bulkAdding}
+        onOpenCloseDeliverable={isManager ? () => setCloseModalOpen(true) : undefined}
       />
+
+      {isManager && (
+        <CloseDeliverableModal
+          open={closeModalOpen}
+          onClose={() => setCloseModalOpen(false)}
+          currentUserId={currentUser.id}
+          projects={projects}
+          deliverables={deliverables}
+          onClosed={() => {
+            getDeliverables(currentUserId).then(setDeliverables).catch(() => {});
+          }}
+        />
+      )}
 
       {selectedIds.length > 0 && (
         <BulkActionBar
@@ -212,7 +223,6 @@ export default function WorkSheetPage() {
           projects={projects}
           deliverables={deliverables}
           onUpdate={handleUpdate}
-          onDelete={handleDelete}
           onCreate={handleCreateFromDraft}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}

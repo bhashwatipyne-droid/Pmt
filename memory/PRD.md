@@ -101,6 +101,18 @@ User (id, name, email, role ∈ {admin, manager, member}, department, active)
 - Activity history / audit log on deliverables and work items.
 - Notifications (in-app for approvals & new assignments).
 - Refactor: split `server.py` into routers (users, projects, deliverables, approvals, dashboard, work_items).
+- **Deferred (paused by user)**: 4-segment progress bar per deliverable (Content/Design/Animate/Finish) on Dashboard/Project Detail, showing current-stage-in-progress vs closed.
+- **Open question for user**: since Admin's Work Sheet is now fully view-only, the pre-existing admin-only single-row delete (trash icon) and bulk-delete-selected are now unreachable via UI (backend still restricts delete to admin role, unchanged). No other role was given delete rights. Flag to user: should delete rights move to Manager (own department) or stay admin-only/unused for now?
+- Deliverable Type dropdown is still shared (all 29 types) across all departments — user explicitly deferred per-department splitting until after beta testing.
+
+## Recent additions (Sep 2026) — Admin view-only + department-scoped editing
+- **Admin Work Sheet = fully view-only**: no draft row, no Add-Row/Add-100-rows/Close-Deliverable buttons, every cell (including checkboxes) disabled. Enforced both frontend (render-level) and backend (`POST/PATCH/bulk-create /work-items` return 403 for admin role).
+- **Visibility opened up**: `GET /api/work-items` no longer filters to only the requester's own rows for members — everyone (member/manager/admin) now sees ALL rows. Editing remains restricted.
+- **Department-scoped editing**: Members can only edit rows they created. Managers can only edit rows created by someone in their OWN department (Content/Design/Animation) — cross-department rows render fully disabled. New shared helper `/app/frontend/src/lib/worksheetPermissions.js` (`canEditWorkItem`) used by `WorkSheetRow` + `WorkSheetTable` (select-all scoping). Backend `scoped_update_fields()` takes a `creator_department` param and blocks manager edits when department doesn't match (including when creator_department is missing).
+- **Column rename/restructure**: "Deliverable Link" (was actually the structural `deliverable_id` dropdown) renamed to plain **"Deliverable"**. New **"Deliverable Link"** column added — genuine free-text field (`deliverable_link` on WorkItem) for pasting a Drive/Figma URL, editable by row owner (member on own row) or department manager.
+- **"Deliverable Closed" button**: new solid green button, top-left of Work Sheet toolbar, Manager-role only. Opens a modal (Project select → in-progress-Deliverable select) → "Close Stage" reuses the existing `/deliverables/{id}/approve` endpoint to advance the deliverable's stage (Content→Design→Animate→Finish→Completed), reflected on Admin Dashboard / Project Detail.
+- **Admin Edit Deliverable modal**: "Current Stage" and "Stage Status" are now read-only badges (no longer editable dropdowns) — fully driven by the Work Sheet's "Deliverable Closed" action now.
+- Verified via testing_agent iteration_6 (100% pass — 14/14 backend pytest, full frontend Playwright regression across admin/manager/member roles). One minor a11y polish item (DialogDescription) fixed post-test.
 
 ## Architecture / operational notes
 - Backend: FastAPI + Motor (MongoDB) on port 8001, `/api` prefix.

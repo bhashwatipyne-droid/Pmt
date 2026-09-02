@@ -3,12 +3,15 @@ import { Checkbox } from "../ui/checkbox";
 import { WorkSheetRow } from "./WorkSheetRow";
 import { DraftWorkSheetRow } from "./DraftWorkSheetRow";
 import { WORKSHEET } from "@/constants/testIds";
+import { canEditWorkItem } from "@/lib/worksheetPermissions";
 
-const COLUMNS = ["Date", "Project", "Deliverable Link", "Stage", "Deliverable", "Type", "Category", "Version", "Time (min)", "Creator", "Reviewer", "Remarks", "Status"];
+const COLUMNS = ["Date", "Project", "Deliverable", "Stage", "Deliverable Name", "Deliverable Link", "Type", "Category", "Version", "Time (min)", "Creator", "Reviewer", "Remarks", "Status"];
 
-export const WorkSheetTable = ({ items, currentUser, users, options, projects, deliverables, onUpdate, onDelete, onCreate, selectedIds, onToggleSelect, onToggleSelectAll }) => {
-  const allSelected = items.length > 0 && selectedIds.length === items.length;
-  const totalCols = COLUMNS.length + (currentUser.role === "admin" ? 3 : 2); // #, checkbox, cols, (delete for admin)
+export const WorkSheetTable = ({ items, currentUser, users, options, projects, deliverables, onUpdate, onCreate, selectedIds, onToggleSelect, onToggleSelectAll }) => {
+  const isAdmin = currentUser.role === "admin";
+  const editableItems = items.filter((it) => canEditWorkItem(currentUser, it, users));
+  const allSelected = editableItems.length > 0 && selectedIds.length === editableItems.length;
+  const totalCols = COLUMNS.length + 2; // #, checkbox, cols
 
   return (
     <div className="flex-1 overflow-auto sheet-mode">
@@ -21,25 +24,26 @@ export const WorkSheetTable = ({ items, currentUser, users, options, projects, d
                 data-testid="worksheet-select-all-checkbox"
                 checked={allSelected}
                 onCheckedChange={onToggleSelectAll}
-                disabled={items.length === 0}
+                disabled={editableItems.length === 0}
               />
             </TableHead>
             {COLUMNS.map((c) => (
               <TableHead key={c}>{c}</TableHead>
             ))}
-            {currentUser.role === "admin" && <TableHead className="w-10" />}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {/* Inline draft row — always shown; typing into any field creates the row */}
-          <DraftWorkSheetRow
-            currentUser={currentUser}
-            users={users}
-            options={options}
-            projects={projects}
-            deliverables={deliverables}
-            onCreate={onCreate}
-          />
+          {/* Inline draft row — always shown for editors; typing into any field creates the row */}
+          {!isAdmin && (
+            <DraftWorkSheetRow
+              currentUser={currentUser}
+              users={users}
+              options={options}
+              projects={projects}
+              deliverables={deliverables}
+              onCreate={onCreate}
+            />
+          )}
           {items.length === 0 ? (
             <TableRow>
               <td colSpan={totalCols} data-testid={WORKSHEET.emptyState} className="py-16 text-center">
@@ -59,7 +63,6 @@ export const WorkSheetTable = ({ items, currentUser, users, options, projects, d
                 projects={projects}
                 deliverables={deliverables}
                 onUpdate={onUpdate}
-                onDelete={onDelete}
                 selected={selectedIds.includes(item.id)}
                 onToggleSelect={onToggleSelect}
               />

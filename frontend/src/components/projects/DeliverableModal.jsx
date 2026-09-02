@@ -7,9 +7,6 @@ import { getOptions, API } from "@/services/api";
 
 const inputBase = "w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100";
 
-const STAGES = ["Content", "Design", "Animate", "Finish"];
-const STAGE_STATUSES = ["Not Started", "In Progress", "Ready for Review", "Changes Requested", "Completed"];
-
 export const DeliverableModal = ({ open, mode, projectId, initial, users, onClose, onSaved }) => {
   const { currentUserId } = useUser();
   const [name, setName] = useState("");
@@ -54,8 +51,6 @@ export const DeliverableModal = ({ open, mode, projectId, initial, users, onClos
           owner_id: ownerId || null,
           start_dt: startDt || null,
           end_dt: endDt || null,
-          current_stage: stage,
-          stage_status: stageStatus,
         }, { headers });
         toast.success("Deliverable updated");
         onSaved?.(data);
@@ -121,16 +116,13 @@ export const DeliverableModal = ({ open, mode, projectId, initial, users, onClos
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Current Stage</label>
-                <select data-testid="deliverable-modal-stage" value={stage} onChange={(e) => setStage(e.target.value)} className={inputBase}>
-                  {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <div data-testid="deliverable-modal-stage-readonly" className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">{stage}</div>
               </div>
               <div>
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Stage Status</label>
-                <select data-testid="deliverable-modal-stage-status" value={stageStatus} onChange={(e) => setStageStatus(e.target.value)} className={inputBase}>
-                  {STAGE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <div data-testid="deliverable-modal-stage-status-readonly" className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">{stageStatus}</div>
               </div>
+              <p className="col-span-2 -mt-1 text-[11px] text-slate-400">Driven by the "Deliverable Closed" action in the Work Sheet — not editable here.</p>
             </div>
           )}
         </div>

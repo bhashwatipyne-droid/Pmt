@@ -1,12 +1,12 @@
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Plus, X, Rows3 } from "lucide-react";
+import { Plus, X, Rows3, CheckCircle2 } from "lucide-react";
 import { WORKSHEET } from "@/constants/testIds";
 
 const ALL_VALUE = "__all__";
 
-export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAdd, resultCount, onBulkAdd, bulkAdding }) => {
+export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAdd, resultCount, onBulkAdd, bulkAdding, onOpenCloseDeliverable }) => {
   const update = (key, value) => setFilters((f) => ({ ...f, [key]: value === ALL_VALUE ? "" : value }));
 
   const clear = () => setFilters({ search: "", status: "", deliverable_type: "", work_category: "", month: "" });
@@ -15,6 +15,17 @@ export const WorkSheetToolbar = ({ filters, setFilters, options, onAddRow, canAd
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-3">
+      {onOpenCloseDeliverable && (
+        <Button
+          data-testid={WORKSHEET.closeDeliverableBtn}
+          onClick={onOpenCloseDeliverable}
+          size="sm"
+          className="h-9 bg-emerald-600 hover:bg-emerald-700"
+        >
+          <CheckCircle2 className="mr-1 h-4 w-4" /> Deliverable Closed
+        </Button>
+      )}
+
       <Input
         data-testid={WORKSHEET.searchInput}
         placeholder="Search deliverable or remarks..."

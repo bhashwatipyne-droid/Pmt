@@ -24,4 +24,6 @@ export const WORKSHEET = {
   statusSelect: 'worksheet-status-select',
   deleteRowBtn: 'worksheet-delete-row-btn',
   myRowsCount: 'worksheet-my-rows-count',
+  deliverableLinkInput: 'worksheet-deliverable-link-input',
+  closeDeliverableBtn: 'worksheet-close-deliverable-btn',
 };

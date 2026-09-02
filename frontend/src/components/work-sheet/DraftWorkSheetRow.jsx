@@ -14,6 +14,7 @@ const emptyDraft = (deliverableTypeDefault) => ({
   deliverable_id: null,
   stage: null,
   deliverable_name: "",
+  deliverable_link: "",
   deliverable_type: deliverableTypeDefault || "",
   work_category: "Core",
   version: "",
@@ -41,7 +42,7 @@ export const DraftWorkSheetRow = ({ currentUser, users, options, projects = [], 
   const setField = (field, value) => setDraft((prev) => ({ ...prev, [field]: value }));
 
   const isMeaningful = (d) =>
-    !!(d.deliverable_name?.trim() || d.remarks?.trim() || d.project_id || d.deliverable_id || d.stage || (d.time_taken_minutes && Number(d.time_taken_minutes) > 0) || d.version?.trim());
+    !!(d.deliverable_name?.trim() || d.deliverable_link?.trim() || d.remarks?.trim() || d.project_id || d.deliverable_id || d.stage || (d.time_taken_minutes && Number(d.time_taken_minutes) > 0) || d.version?.trim());
 
   const flush = async () => {
     if (creatingRef.current) return;
@@ -147,6 +148,16 @@ export const DraftWorkSheetRow = ({ currentUser, users, options, projects = [], 
           onBlur={flush}
           placeholder="Start typing to add a row…"
           className="h-8 w-[200px]"
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          data-testid="worksheet-draft-deliverable-link"
+          value={draft.deliverable_link}
+          onChange={(e) => setField("deliverable_link", e.target.value)}
+          onBlur={flush}
+          placeholder="Paste drive link"
+          className="h-8 w-[180px]"
         />
       </TableCell>
       <TableCell>

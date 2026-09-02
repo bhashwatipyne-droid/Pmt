@@ -59,7 +59,7 @@ DELIVERABLE_TYPES = [
 WORK_CATEGORIES = ["Core", "Non-Core"]
 STATUSES = ["Not Started", "Ongoing", "Ready for Review", "Changes Requested", "Closed"]
 MEMBER_FORWARD_STATUSES = ["Not Started", "Ongoing", "Ready for Review"]
-MEMBER_EDITABLE_FIELDS = {"work_date", "version", "time_taken_minutes", "remarks", "status", "project_id", "deliverable_id", "stage", "deliverable_name", "deliverable_type"}
+MEMBER_EDITABLE_FIELDS = {"work_date", "version", "time_taken_minutes", "remarks", "status", "project_id", "deliverable_id", "stage", "deliverable_name", "deliverable_type", "deliverable_link"}
 
 PROJECT_STATUSES = ["Planning", "Active", "In Rework", "Completed"]
 STAGES = ["Content", "Design", "Animate", "Finish"]
@@ -116,6 +116,7 @@ class WorkItem(BaseModel):
     month: str
     deliverable_name: str = ""
     deliverable_type: str = ""
+    deliverable_link: str = ""
     work_category: str = "Core"
     version: str = ""
     time_taken_minutes: float = 0
@@ -135,6 +136,7 @@ class WorkItemCreate(BaseModel):
     work_date: Optional[str] = None
     deliverable_name: Optional[str] = ""
     deliverable_type: Optional[str] = ""
+    deliverable_link: Optional[str] = ""
     work_category: Optional[str] = "Core"
     version: Optional[str] = ""
     time_taken_minutes: Optional[float] = 0
@@ -152,6 +154,7 @@ class WorkItemUpdate(BaseModel):
     work_date: Optional[str] = None
     deliverable_name: Optional[str] = None
     deliverable_type: Optional[str] = None
+    deliverable_link: Optional[str] = None
     work_category: Optional[str] = None
     version: Optional[str] = None
     time_taken_minutes: Optional[float] = None
@@ -267,14 +270,19 @@ def gen_project_code() -> str:
     return "proj" + "".join(random.choices(string.ascii_lowercase + string.digits, k=9))
 
 
-def scoped_update_fields(user: User, existing: dict, update_fields: dict) -> dict:
+def scoped_update_fields(user: User, existing: dict, update_fields: dict, creator_department: Optional[str] = None) -> dict:
     """Apply role-based restrictions to a raw update payload. Raises HTTPException on violation."""
+    if user.role == "admin":
+        raise HTTPException(status_code=403, detail="Admins have view-only access to the Work Sheet")
     if user.role == "member":
         if existing.get("creator_id") != user.id:
             raise HTTPException(status_code=403, detail="You can only edit your own work items")
         update_fields = {k: v for k, v in update_fields.items() if k in MEMBER_EDITABLE_FIELDS}
         if "status" in update_fields and update_fields["status"] not in MEMBER_FORWARD_STATUSES:
             raise HTTPException(status_code=403, detail="Members cannot set this status")
+    elif user.role == "manager":
+        if not creator_department or creator_department != user.department:
+            raise HTTPException(status_code=403, detail="You can only edit work items logged by your own department")
     if "work_date" in update_fields and update_fields["work_date"]:
         update_fields["month"] = update_fields["work_date"][:7]
     if "stage" in update_fields and update_fields["stage"] and update_fields["stage"] not in STAGES:
@@ -287,6 +295,13 @@ async def require_admin(x_user_id: Optional[str] = Header(default=None)) -> User
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access only")
     return user
+
+
+async def get_user_department(user_id: Optional[str]) -> Optional[str]:
+    if not user_id:
+        return None
+    doc = await db.users.find_one({"id": user_id}, {"_id": 0, "department": 1})
+    return doc.get("department") if doc else None
 
 
 # ---------------- Routes ----------------
@@ -328,11 +343,10 @@ async def list_work_items(
     deliverable_id: Optional[str] = None,
     x_user_id: Optional[str] = Header(default=None),
 ):
-    user = await get_acting_user(x_user_id)
+    await get_acting_user(x_user_id)
     query = {}
-    if user.role == "member":
-        query["creator_id"] = user.id
-    elif creator_id:
+    # Everyone can see everyone's rows; only editing is restricted by role/department.
+    if creator_id:
         query["creator_id"] = creator_id
     if status:
         query["status"] = status
@@ -358,6 +372,8 @@ async def list_work_items(
 @api_router.post("/work-items", response_model=WorkItem)
 async def create_work_item(payload: WorkItemCreate, x_user_id: Optional[str] = Header(default=None)):
     user = await get_acting_user(x_user_id)
+    if user.role == "admin":
+        raise HTTPException(status_code=403, detail="Admins have view-only access to the Work Sheet")
     data = payload.model_dump()
     work_date = data.pop("work_date", None) or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     month = work_date[:7]
@@ -380,7 +396,8 @@ async def update_work_item(item_id: str, payload: WorkItemUpdate, x_user_id: Opt
     if not existing:
         raise HTTPException(status_code=404, detail="Work item not found")
 
-    update_fields = scoped_update_fields(user, existing, payload.model_dump(exclude_unset=True))
+    creator_department = await get_user_department(existing.get("creator_id"))
+    update_fields = scoped_update_fields(user, existing, payload.model_dump(exclude_unset=True), creator_department)
 
     update_fields["updated_at"] = now_iso()
     await db.work_items.update_one({"id": item_id}, {"$set": update_fields})
@@ -391,6 +408,8 @@ async def update_work_item(item_id: str, payload: WorkItemUpdate, x_user_id: Opt
 @api_router.post("/work-items/bulk-create", response_model=List[WorkItem])
 async def bulk_create_work_items(payload: BulkCreatePayload, x_user_id: Optional[str] = Header(default=None)):
     user = await get_acting_user(x_user_id)
+    if user.role == "admin":
+        raise HTTPException(status_code=403, detail="Admins have view-only access to the Work Sheet")
     if payload.count < 1 or payload.count > 500:
         raise HTTPException(status_code=400, detail="count must be between 1 and 500")
     tpl = (payload.template or WorkItemCreate()).model_dump()
@@ -423,7 +442,8 @@ async def bulk_update_work_items(payload: BulkUpdatePayload, x_user_id: Optional
         if not existing:
             continue
         try:
-            update_fields = scoped_update_fields(user, existing, dict(raw_fields))
+            creator_department = await get_user_department(existing.get("creator_id"))
+            update_fields = scoped_update_fields(user, existing, dict(raw_fields), creator_department)
         except HTTPException:
             continue
         update_fields["updated_at"] = now_iso()
